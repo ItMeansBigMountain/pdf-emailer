@@ -1,3 +1,4 @@
+```
 azure-pdf-emailer/
 ├── main.tf                  # Main Terraform configuration file
 ├── variables.tf             # Terraform variables definition
@@ -21,3 +22,4 @@ azure-pdf-emailer/
 │       └── architecture.png # System architecture diagram
 └── templates/
     └── email_template.html  # HTML template for emails
+```
