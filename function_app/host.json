@@ -1,0 +1,22 @@
+{
+    "version": "2.0",
+    "logging": {
+        "applicationInsights": {
+            "samplingSettings": {
+                "isEnabled": false,
+                "maxTelemetryItemsPerSecond": 5
+            }
+        },
+        "logLevel": {
+            "default": "Information",
+            "Function": "Information"
+        }
+    },
+    "extensions": {
+        "timers": {
+            "scheduleMonitor": {
+                "enabled": true
+            }
+        }
+    }
+}

@@ -1,0 +1,28 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+
+# Environment files
+.env
+.env.*
+
+# Local settings
+local.settings.json
+
+# Test files
+test_*.py
+
+# OS & Editor junk
+.DS_Store
+*.swp
+Thumbs.db
+
+# Logs
+*.log
+
+# Git
+.git/
+.gitignore
+
+# VS Code
+.vscode/

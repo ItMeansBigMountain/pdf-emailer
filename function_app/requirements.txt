@@ -1,0 +1,5 @@
+azure-functions
+openai
+fpdf
+azure-storage-blob
+requests
