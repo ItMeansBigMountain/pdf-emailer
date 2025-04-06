@@ -31,7 +31,6 @@ azure-pdf-emailer/
 
 ### 📄 `README.md` — Azure PDF Generator and Email Sender
 
-```markdown
 # 📧 Azure PDF Generator and Email Sender
 
 An Azure-based serverless app that uses Python to generate PDFs using LLMs and email them via SMTP on a scheduled basis.
