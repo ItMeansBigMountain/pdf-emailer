@@ -1,0 +1,14 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
+
+# Azure Functions
+local.settings.json
+__pycache__/
+*.pyc
+
+# VSCode
+.vscode/
