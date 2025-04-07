@@ -1,8 +1,7 @@
 import os
 import azure.functions as func
 from datetime import datetime
-from langchain.chains import LLMChain
-from utils import initialize_llm, generate_pdf, prompt_template, send_email
+from utils import initialize_llm, generate_pdf, newsletter_prompt, send_email, extract_subject_body
 
 app = func.FunctionApp()
 
@@ -10,22 +9,34 @@ app = func.FunctionApp()
 @app.route(route="generate-newsletter", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
 def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
     try:
+        # Parse request data
         data = req.get_json()
         audience = data.get("audience", "a general audience")
         stats = data.get("stats", "")
         provider = data.get("provider", "openai")
-        model = data.get("model", None)
+        model = data.get("model", "gpt-3.5-turbo")
         temperature = float(data.get("temperature", 0.7))
+        tone = data.get("tone", "informative")
+        cta = data.get("cta", "Learn more on our website!")
+        cta_note = data.get("cta_note", "Follow us for updates")
+        title = data.get("title", "Your Monthly Newsletter")
 
+        # Fill the prompt template
+        filled_prompt = newsletter_prompt.format(
+            audience=audience,
+            stat=stats,
+            tone=tone,
+            cta=cta,
+            cta_note=cta_note,
+            title=title
+        )
+
+        # Initialize LLM and generate content
         llm = initialize_llm(provider=provider, model_name=model, temperature=temperature)
-        chain = prompt_template | llm
-        raw_output = chain.invoke({"audience": audience, "stats": stats})
+        raw_output = llm.invoke(filled_prompt).content
 
-        if "Subject:" in raw_output and "Body:" in raw_output:
-            subject = raw_output.split("Subject:")[1].split("Body:")[0].strip()
-            body = raw_output.split("Body:")[1].strip()
-        else:
-            subject, body = "Newsletter Template", raw_output.strip()
+        # Extract subject and body from the LLM output
+        subject, body = extract_subject_body(raw_output)
 
         # Generate PDF
         pdf_stream = generate_pdf(subject, body)
@@ -33,7 +44,7 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
         # Send Email
         send_email(subject, body, pdf_stream)
 
-        # Return file
+        # Return the generated PDF as a response
         filename = f"newsletter-{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
         return func.HttpResponse(
             body=pdf_stream.read(),
