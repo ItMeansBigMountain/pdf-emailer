@@ -1,46 +1,36 @@
+variable "resource_group_name" {
+  type        = string
+  default     = "pdf-emailer-rg"
+  description = "Name of the Azure Resource Group"
+}
+
 variable "location" {
   type        = string
   default     = "East US"
   description = "Azure region where resources will be deployed"
 }
 
-variable "resource_group_name" {
-  type        = string
-  default     = "pdf-emailer-resources"
-  description = "Name of the resource group"
-}
-
 variable "storage_account_name" {
   type        = string
   default     = "pdfemailerstorage"
-  description = "Unique name for the Azure Storage account"
+  description = "Unique name for the Azure Storage Account (must be globally unique)"
 }
 
 variable "service_plan_name" {
   type        = string
-  default     = "pdf-emailer-service-plan"
-  description = "App Service plan name for the Function App"
+  default     = "pdf-emailer-plan"
+  description = "App Service Plan name for the Azure Function"
 }
 
 variable "function_app_name" {
   type        = string
-  default     = "pdf-emailer-function"
-  description = "Azure Function App name"
-}
-
-variable "management_group_id" {
-  type        = string
-  description = "ID of the Azure Management Group"
-}
-
-variable "billing_scope" {
-  type        = string
-  description = "Billing scope for the new Azure Subscription"
+  default     = "pdf-emailer-func"
+  description = "Name of the Azure Linux Function App"
 }
 
 variable "smtp_username" {
   type        = string
-  description = "SMTP username for sending emails"
+  description = "SMTP username (e.g., email account for sending)"
   sensitive   = true
 }
 
@@ -52,27 +42,27 @@ variable "smtp_password" {
 
 variable "email_from" {
   type        = string
-  description = "Email sender address"
+  description = "Sender email address"
 }
 
 variable "email_recipients" {
   type        = string
-  description = "Comma-separated list of recipients"
+  description = "Comma-separated recipient list"
 }
 
 variable "llm_api_key" {
   type        = string
-  description = "API key for LLM provider (e.g., OpenAI)"
+  description = "API key for OpenAI or LLM provider"
   sensitive   = true
 }
 
 variable "llm_endpoint" {
   type        = string
-  description = "LLM endpoint (e.g., OpenAI Chat API)"
+  description = "Endpoint URL for the LLM provider"
 }
 
 variable "schedule" {
   type        = string
   default     = "0 0 9 * * *"
-  description = "CRON expression for the scheduled job"
+  description = "CRON expression for scheduling the Function"
 }
