@@ -1,11 +1,10 @@
 import os
 import azure.functions as func
-from datetime import datetime
-from utils import initialize_llm, generate_pdf, newsletter_prompt, send_email, extract_subject_body
+from utils import initialize_llm, newsletter_prompt, send_email, extract_subject_body
 
 app = func.FunctionApp()
 
-@app.function_name(name="GenerateNewsletterPDF")
+@app.function_name(name="GenerateNewsletter")
 @app.route(route="generate-newsletter", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
 def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
     try:
@@ -38,20 +37,17 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
         # Extract subject and body from the LLM output
         subject, body = extract_subject_body(raw_output)
 
-        # Generate PDF
-        pdf_stream = generate_pdf(subject, body)
-
         # Send Email
-        send_email(subject, body, pdf_stream)
+        send_email(subject, body)
 
-        # Return the generated PDF as a response
-        filename = f"newsletter-{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+        # Return a success response
         return func.HttpResponse(
-            body=pdf_stream.read(),
-            headers={
-                "Content-Type": "application/pdf",
-                "Content-Disposition": f'attachment; filename="{filename}"'
-            },
+            body=(
+                f"Newsletter sent successfully!\n\n"
+                f"Subject: {subject}\n"
+                f"Body : {body}" 
+                f"Recipients: {os.getenv('EMAIL_RECIPIENTS')}\n"
+            ),
             status_code=200
         )
 

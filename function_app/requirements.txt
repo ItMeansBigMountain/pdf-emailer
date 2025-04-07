@@ -16,3 +16,4 @@ langchain-huggingface
 # Optional: for local Hugging Face models
 transformers
 torch
+markdown2

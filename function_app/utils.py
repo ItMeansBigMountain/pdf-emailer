@@ -6,6 +6,8 @@ from datetime import datetime
 from fpdf import FPDF
 from email.message import EmailMessage
 from langchain.prompts import PromptTemplate
+from markdown2 import markdown  # Add this library for Markdown-to-HTML conversion
+
 
 # Load .env
 load_dotenv()
@@ -69,40 +71,42 @@ def initialize_llm(provider: str, model_name: str = None, temperature=0.7):
     else:
         raise Exception(f"Unsupported provider: {provider}")
 
-# --- PDF Generator ---
-def generate_pdf(subject, body):
-    """Generates a PDF from the given subject and body."""
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Helvetica", 'B', 16)
-        pdf.multi_cell(0, 10, subject, align='C')
-        pdf.ln(5)
-        pdf.set_font("Helvetica", '', 12)
-        pdf.multi_cell(0, 10, body)
-        buffer = BytesIO()
-        pdf.output(buffer)
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        raise Exception(f"Error generating PDF: {e}")
 
 # --- Email Sender ---
-def send_email(subject, body, pdf_bytes):
-    """Sends an email with the given subject, body, and PDF attachment."""
+
+# --- Email Sender ---
+def send_email(subject, body):
+    """Sends an email with the given subject and body, converting Markdown to HTML if necessary."""
     try:
+        # Convert Markdown to HTML
+        html_body = markdown(body)
+
+        # Create the email message
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = os.getenv("EMAIL_FROM")
         msg["To"] = os.getenv("EMAIL_RECIPIENTS")
-        msg.set_content(body)
+        msg.set_content(body)  # Plain text fallback
+        msg.add_alternative(html_body, subtype="html")  # HTML content
 
-        # Attach PDF
-        msg.add_attachment(pdf_bytes.read(), maintype="application", subtype="pdf", filename="newsletter.pdf")
-
+        # Send the email
         with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT", "587"))) as server:
             server.starttls()
             server.login(os.getenv("SMTP_USERNAME"), os.getenv("SMTP_PASSWORD"))
             server.send_message(msg)
+            print(f"Email sent successfully to {os.getenv('EMAIL_RECIPIENTS')}")
+            
     except Exception as e:
         raise Exception(f"Error sending email: {e}")
+    
+
+def extract_subject_body(raw_output: str) -> tuple[str, str]:
+    """Extracts the subject and body from the raw output of the LLM."""
+    try:
+        # Split the raw output into subject and body
+        lines = raw_output.split("\n")
+        subject = lines[0].strip()
+        body = "\n".join(lines[1:]).strip()
+        return subject, body
+    except Exception as e:
+        raise Exception(f"Error extracting subject and body: {e}")

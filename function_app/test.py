@@ -1,17 +1,5 @@
 import os
-import smtplib
-from utils import initialize_llm, generate_pdf, send_email, newsletter_prompt
-
-
-def extract_subject_body(raw_output: str) -> tuple[str, str]:
-    """Parses raw LLM output into subject and body."""
-    if "Subject:" in raw_output and "Body:" in raw_output:
-        subject = raw_output.split("Subject:")[1].split("Body:")[0].strip()
-        body = raw_output.split("Body:")[1].strip()
-    else:
-        subject = "Newsletter Template"
-        body = raw_output.strip()
-    return subject, body
+from utils import initialize_llm, send_email, newsletter_prompt, extract_subject_body
 
 
 def generate_newsletter(provider: str = "openai", model: str = "gpt-3.5-turbo", temperature: float = 0.7) -> tuple[str, str]:
@@ -49,15 +37,12 @@ if __name__ == "__main__":
     try:
         # Generate the newsletter
         subject, body = generate_newsletter(provider="openai", model="gpt-3.5-turbo", temperature=0.7)
-
-        # Generate PDF from the subject and body
-        pdf_bytes = generate_pdf(subject, body)
-
+        print(f"{"-"*50}\nGenerated Newsletter")
+        
         # Send the email with the generated newsletter
-        send_email(subject, body, pdf_bytes)
-
-        print("Generated Newsletter:\n")
+        send_email(subject, body)
         print(f"Subject: {subject}\n")
-        print(f"Body:\n{body}")
+        print(f"Body Preview:\n{body[:100]}...\n")
+
     except Exception as e:
         print(f"Error: {e}")
