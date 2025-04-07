@@ -2,6 +2,7 @@ import os
 import azure.functions as func
 from utils import initialize_llm, newsletter_prompt, send_email, extract_subject_body
 
+# INIT AZURE FUNCTIONS
 app = func.FunctionApp()
 
 @app.function_name(name="GenerateNewsletter")
