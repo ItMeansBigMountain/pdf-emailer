@@ -1,5 +1,18 @@
 azure-functions
-openai
 fpdf
-azure-storage-blob
-requests
+
+# LangChain core
+langchain
+langchain-core
+
+# Providers (install only what you use)
+openai
+langchain-openai
+langchain-anthropic
+langchain-cohere
+langchain-community
+langchain-huggingface
+
+# Optional: for local Hugging Face models
+transformers
+torch
