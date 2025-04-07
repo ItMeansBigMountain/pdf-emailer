@@ -1,30 +1,17 @@
-provider "azapi" {
-  # Used alongside azurerm provider
-}
-
 provider "azurerm" {
   features {}
 }
 
 ###########################################
 # Create a new Azure Subscription under a management group
-resource "azapi_resource" "subscription" {
-  type      = "Microsoft.Subscription/subscriptionCreationParameters@2021-10-01"
-  name      = "example-sub"
-  parent_id = "/providers/Microsoft.Subscription"
-
-  body = jsonencode({
-    displayName       = "My New Subscription"
-    managementGroupId = var.management_group_id
-    workload          = "Production"
-    billingScope      = var.billing_scope
-  })
-
-  response_export_values = ["properties.subscriptionId"]
+data "azurerm_billing_enrollment_account_scope" "example" {
+  billing_account_name    = "1234567890"
+  enrollment_account_name = "0123456"
 }
 
-output "subscription_id" {
-  value = azapi_resource.subscription.output["properties.subscriptionId"]
+resource "azurerm_subscription" "example" {
+  subscription_name = "My Example EA Subscription"
+  billing_scope_id  = data.azurerm_billing_enrollment_account_scope.example.id
 }
 
 ###########################################
