@@ -1,177 +1,182 @@
-# 📧 Azure PDF Emailer
+# 📧 Azure PDF Emailer — AI-Powered Newsletter Delivery System
 
-An Azure-based serverless application that generates newsletters as PDFs using LLMs (Large Language Models) and sends them via email using SMTP. This project leverages Azure Functions, Terraform for infrastructure as code, and Python for the application logic.
+Generate beautifully written AI newsletters and send them via email — all automated in the cloud using Azure Functions and Terraform.
+
+GitHub Repo: [ItMeansBigMountain/pdf-emailer](https://github.com/ItMeansBigMountain/pdf-emailer)
+
+---
+
+## 🚀 What Is This?
+
+This is a **serverless application** that:
+- Uses LLMs (like OpenAI) to generate high-quality marketing newsletters.
+- Formats them in Markdown, converts to HTML.
+- Sends them to your mailing list via email.
+- Can be deployed to Azure with 1 command using Terraform.
+
+Perfect for:
+- Content creators
+- Small businesses
+- Agencies with client email lists
+- Anyone wanting automated, personalized content sent out daily/weekly/monthly
+
+---
+
+## 🧠 Key Features
+
+| Feature | Description |
+|--------|-------------|
+| **LLM-generated Content** | Dynamically generated using OpenAI, Anthropic, Cohere, HuggingFace. |
+| **Markdown-to-HTML** | Emails support modern styling for readability. |
+| **Email via SMTP** | Easily configurable with Gmail, Outlook, or any SMTP server. |
+| **Azure Functions** | Automatically runs on the cloud; scheduled or HTTP-triggered. |
+| **Terraform Infrastructure** | One-command deploys your full cloud backend. |
+| **Multimodel Support** | Plug in different LLMs to test style and tone. |
+| **Prompt Templates** | Customizable audience, tone, call-to-action, etc. |
 
 ---
 
 ## 📂 Project Structure
 
 ```
-pdf-emailer/
-├── .gitignore               # Files and directories to ignore in Git
-├── README.md                # Project documentation
-├── function_app/            # Azure Function application code
-│   ├── __init__.py          # Entry point for the Azure Function
-│   ├── utils.py             # Helper functions for PDF generation and LLM integration
-│   ├── requirements.txt     # Python dependencies
-│   ├── host.json            # Azure Function host configuration
-│   ├── local.settings.json  # Local development settings (excluded from Git)
-│   ├── .funcignore          # Files to ignore during Azure Function deployment
-│   └── test.py              # Script for testing the function locally
-├── infra/                   # Terraform configuration for Azure infrastructure
-│   ├── main.tf              # Main Terraform configuration
-│   ├── variables.tf         # Terraform variables definition
-│   ├── outputs.tf           # Terraform outputs definition
-│   ├── backend.tf           # Terraform backend configuration
-│   ├── terraform.tfvars     # Terraform variable values (excluded from Git)
-│   └── .terraform/          # Terraform state and provider files
-├── templates/               # Email templates
-│   └── email_template.html  # HTML template for email content
-├── docs/                    # Documentation
-│   ├── setup_guide.md       # Step-by-step setup instructions
-│   ├── cost_analysis.md     # Cost analysis and optimization tips
-│   └── images/              # Images for documentation
-└── scripts/                 # Utility scripts
-    └── deploy.sh            # Script for automating deployment
+.
+├── function_app/
+│   ├── __init__.py            # Azure Function entrypoint
+│   ├── test.py                # Local script to test generation + send
+│   ├── utils.py               # LLM integration, email sender, prompt template
+│   ├── requirements.txt       # Python dependencies
+│   └── host.json              # Azure config
+├── infra/
+│   ├── main.tf, variables.tf  # Terraform configs for Azure infra
+├── .env                       # Your secret SMTP + API keys
 ```
 
 ---
 
-## ✅ Prerequisites
+## ⚙️ Prerequisites
 
-Before you begin, ensure you have the following:
-
-- An Azure account with an active subscription
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) installed
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) installed
-- [Python 3.10+](https://www.python.org/downloads/) installed
-- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) installed
-- [Git](https://git-scm.com/) installed
+- Python 3.10+
+- Azure CLI
+- Terraform
+- An SMTP-enabled email (e.g., Gmail with App Passwords)
+- OpenAI or other LLM API keys
 
 ---
 
-## 🚀 Setup Instructions
+## 🛠️ Setup Guide
 
-### 1. Clone the Repository
+### 1. Clone & Setup
 
 ```bash
-git clone https://github.com/your-repo/pdf-emailer.git
-cd pdf-emailer
+git clone https://github.com/ItMeansBigMountain/pdf-emailer.git
+cd pdf-emailer/function_app
+pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment Variables
 
-Update the `infra/terraform.tfvars` file with your configuration:
+To run `test.py` locally, create a `.env` file in `function_app/` with:
+
+```env
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your@email.com
+SMTP_PASSWORD=your-app-password
+EMAIL_FROM=your@email.com
+EMAIL_RECIPIENTS=recipient1@example.com,recipient2@example.com
+
+# LLM API keys
+OPENAI_API_KEY=sk-xxx
+ANTHROPIC_API_KEY=sk-ant-xxx
+COHERE_API_KEY=your-cohere-key
+HUGGINGFACEHUB_API_TOKEN=your-huggingface-key
+```
+
+The `.env` file is used to load all necessary credentials for LLM vendors and email delivery when running the system locally.
+
+To set these credentials for the deployed cloud system, use `terraform.tfvars` inside the `infra/` folder. These map directly to Azure App Settings so your deployed Azure Function has access to the same credentials in a secure manner.
+
+Example Terraform Variables:
 
 ```hcl
-resource_group_name  = "pdf-emailer-rg"
-location             = "East US"
-smtp_username        = "your-email@example.com"
-smtp_password        = "your-email-password"
-email_from           = "notifications@yourcompany.com"
-email_recipients     = "recipient1@example.com,recipient2@example.com"
-OPENAI_API_KEY       = "your-openai-api-key"
-schedule             = "0 0 9 * * *"
-```
-
-### 3. Install Python Dependencies
-
-Navigate to the `function_app` directory and install the required Python packages:
-
-```bash
-cd function_app
-pip install -r requirements.txt
-```
-
-### 4. Initialize Terraform
-
-Navigate to the `infra` directory and initialize Terraform:
-
-```bash
-cd ../infra
-terraform init
+smtp_username = "your@email.com"
+smtp_password = "your-app-password"
+email_from    = "your@email.com"
+email_recipients = "recipient1@example.com,recipient2@example.com"
+OPENAI_API_KEY    = "sk-xxx"
 ```
 
 ---
 
-## 📦 Deployment
+## 🧪 Test Locally
 
-### 1. Deploy Infrastructure
-
-Run the following command to deploy the Azure infrastructure:
-
-```bash
-terraform apply
-```
-
-Save the output, which includes the function app URL.
-
-### 2. Deploy the Azure Function
-
-Navigate to the `function_app` directory and deploy the function:
-
-```bash
-cd ../function_app
-func azure functionapp publish <function-app-name> --python
-```
-
----
-
-## 🧪 Testing
-
-### 1. Test Locally
-
-Run the `test.py` script to test the newsletter generation locally:
+Run the test script to see a sample newsletter and send it:
 
 ```bash
 python test.py
 ```
 
-### 2. Verify Deployment
-
-- Visit the Azure Portal and navigate to your Function App.
-- Check the logs to ensure the function is running correctly.
-- Verify that emails are being sent as expected.
+This uses hardcoded sample values. Customize `test.py` to experiment with tones, audiences, or call-to-actions.
 
 ---
 
-## 🔧 Troubleshooting
+## ☁️ Deploy to Azure
 
-| Issue                  | Possible Fix                                                                 |
-|------------------------|-----------------------------------------------------------------------------|
-| Function not executing | Check the logs in the Azure Portal for errors.                             |
-| Email not sending      | Verify SMTP credentials and recipient email addresses.                     |
-| PDF not generated      | Ensure the LLM API key is valid and the model is reachable.                |
-| Terraform errors       | Ensure Azure CLI is logged in and the correct subscription is selected.    |
+### 1. Configure Terraform
+
+Edit `infra/terraform.tfvars` with your Azure details and credentials.
+
+### 2. Deploy Infrastructure
+
+```bash
+cd infra
+terraform init
+terraform apply
+```
+
+### 3. Deploy Function
+
+```bash
+cd ../function_app
+func azure functionapp publish pdf-emailer-func
+```
+
+### 4. Call Your Endpoint
+
+```bash
+curl -X POST https://<your-func-app>.azurewebsites.net/api/generate-newsletter \
+     -H "Content-Type: application/json" \
+     -d '{
+           "audience": "startup founders",
+           "stats": "90% say newsletters help them discover tools",
+           "tone": "inspirational",
+           "cta": "Join our private community",
+           "cta_note": "forward this to a founder friend",
+           "title": "🚀 Founders Who Read, Lead"
+         }'
+```
 
 ---
 
-## 🔐 Best Practices
+## 📈 Planned Features
 
-- Store sensitive information (e.g., API keys, SMTP credentials) securely in Azure App Settings.
-- Enable logging in the Azure Function for better debugging.
-- Use a fallback mechanism for LLM failures to ensure reliability.
-- Regularly monitor Azure costs and optimize resource usage.
-
----
-
-## 📚 Documentation
-
-- [Setup Guide](docs/setup_guide.md): Detailed setup instructions
-- [Cost Analysis](docs/cost_analysis.md): Cost breakdown and optimization tips
-- [Email Template](templates/email_template.html): Editable HTML email template
+| Feature | Description |
+|--------|-------------|
+| 📁 Upload Email List | Accept CSV/JSON/TXT to bulk send to lists. |
+| 👥 Multi-client Support | Send personalized newsletters per client via large CSV. |
+| 🔄 Automatic Data Gathering | Scrape data from trusted sources (e.g. CNBC, Hacker News). |
+| 🧠 Source Management | UI or config to add/remove RSS/news sources. |
+| 🗓️ Subscription Engine | End-users subscribe and get emails regularly. |
 
 ---
 
-## 🛠️ Future Enhancements
+## 🤝 Contributing
 
-- Add a web dashboard for managing newsletters and recipients.
-- Implement analytics for email delivery and engagement.
-- Support additional LLM providers and models.
-- Add more robust error handling and retry mechanisms.
+Want to help build auto-sourced newsletters, integrate vector databases, or plug in new providers? PRs welcome!
 
 ---
 
 ## 📝 License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT
+

@@ -13,7 +13,6 @@ from markdown2 import markdown  # Add this library for Markdown-to-HTML conversi
 load_dotenv()
 
 # --- Prompt ---
-# Define a parameterized prompt template for a newsletter/email
 newsletter_prompt = PromptTemplate(
     input_variables=["audience", "stat", "tone", "cta", "title", "cta_note"],
     template=(
@@ -71,9 +70,6 @@ def initialize_llm(provider: str, model_name: str = None, temperature=0.7):
     else:
         raise Exception(f"Unsupported provider: {provider}")
 
-
-# --- Email Sender ---
-
 # --- Email Sender ---
 def send_email(subject, body):
     """Sends an email with the given subject and body, converting Markdown to HTML if necessary."""
@@ -95,11 +91,9 @@ def send_email(subject, body):
             server.login(os.getenv("SMTP_USERNAME"), os.getenv("SMTP_PASSWORD"))
             server.send_message(msg)
             print(f"Email sent successfully to {os.getenv('EMAIL_RECIPIENTS')}")
-            
+
     except Exception as e:
         raise Exception(f"Error sending email: {e}")
-    
-
 def extract_subject_body(raw_output: str) -> tuple[str, str]:
     """Extracts the subject and body from the raw output of the LLM."""
     try:
