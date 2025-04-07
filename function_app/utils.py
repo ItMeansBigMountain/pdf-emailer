@@ -1,59 +1,66 @@
 import os
-import azure.functions as func
-from fpdf import FPDF
+import smtplib
+from dotenv import load_dotenv
 from io import BytesIO
 from datetime import datetime
+from fpdf import FPDF
+from email.message import EmailMessage
 
-# Load environment variables from .env file
-from dotenv import load_dotenv
+from langchain.prompts import PromptTemplate
+
+# Load .env
 load_dotenv()
 
-# LangChain imports
+# --- Prompt ---
 from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
 
-# Init LLM
+# Define a parameterized prompt template for a newsletter/email
+newsletter_prompt = PromptTemplate(
+    input_variables=["audience", "stat", "tone", "cta", "title"],
+    template=(
+        "You are a professional copywriter creating a marketing email.\n"
+        "Audience: {audience}\n"
+        "Tone: {tone}\n"
+        "{% if title %}Title/Subject: \"{title}\"\n{% endif %}"
+        "Objective: Use the statistic \"{stat}\" to provide value and build credibility.\n"
+        "Requirements:\n"
+        "- Start with a strong hook that grabs the reader’s attention.\n"
+        "- Write in a way that is engaging and not overly salesy or \"cringe\".\n"
+        "- Use markdown formatting (headings, bullet points, **bold** text) for readability.\n"
+        "- Use 1-2 relevant emojis to add personality (do not overuse them).\n"
+        "- Include a clear call-to-action{cta_note}.\n\n"
+        "Now draft the email in Markdown format below.\n"
+        "{% if title %}# {title}\n\n{% endif %}"
+        "**Hi** {audience},\n\n"
+        "_(Hook opening line that piques interest using a relatable scenario or question.)_\n\n"
+        "{% raw %}{{% endraw %}Body content focusing on how {stat} relates to the reader's needs, written in a {tone} tone.{% raw %}%}{% endraw %}\n\n"
+        "- Bullet point highlighting a key benefit or tip\n"
+        "- Another key point or insight\n\n"
+        "**Call to Action:** {cta}\n\n"
+        "*Cheers*,\nYour Company Team"
+    ).replace("{cta_note}", " (\"{cta}\")" if True else "")
+)
+
+# --- LLM Loader ---
 def initialize_llm(provider: str, model_name: str = None, temperature=0.7):
     provider = provider.lower()
-    
-    # Grab secrets from code, env, or config
     openai_api_key = os.getenv("OPENAI_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     cohere_api_key = os.getenv("COHERE_API_KEY")
-    huggingface_api_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+    hf_token = os.getenv("HUGGINGFACEHUB_API_TOKEN")
 
     if provider == "openai":
         from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=model_name or "gpt-3.5-turbo",
-            temperature=temperature,
-            api_key=openai_api_key  # explicit
-        )
-
+        return ChatOpenAI(model=model_name or "gpt-3.5-turbo", temperature=temperature, api_key=openai_api_key)
     elif provider == "anthropic":
-        from langchain_community.chat_models import ChatAnthropic
-        return ChatAnthropic(
-            model=model_name or "claude-2",
-            temperature=temperature,
-            api_key=anthropic_api_key  # explicit
-        )
-
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=model_name or "claude-3-7-sonnet-20250219", temperature=temperature, anthropic_api_key=anthropic_api_key)
     elif provider == "cohere":
-        from langchain_community.llms import Cohere
-        return Cohere(
-            model=model_name or "command",
-            temperature=temperature,
-            cohere_api_key=cohere_api_key  # explicit
-        )
-
+        from langchain_cohere import ChatCohere
+        return ChatCohere(model=model_name or "command", temperature=temperature, cohere_api_key=cohere_api_key)
     elif provider == "huggingface-hub":
         from langchain_community.llms import HuggingFaceHub
-        return HuggingFaceHub(
-            repo_id=model_name or "gpt2",
-            huggingfacehub_api_token=huggingface_api_token,
-            model_kwargs={"temperature": temperature}
-        )
-
+        return HuggingFaceHub(repo_id=model_name or "gpt2", huggingfacehub_api_token=hf_token, model_kwargs={"temperature": temperature})
     elif provider == "huggingface-local":
         from langchain_community.llms import HuggingFacePipeline
         from transformers import AutoTokenizer, pipeline, AutoModelForCausalLM
@@ -61,18 +68,10 @@ def initialize_llm(provider: str, model_name: str = None, temperature=0.7):
         model = AutoModelForCausalLM.from_pretrained(model_name or "gpt2")
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=500)
         return HuggingFacePipeline(pipeline=pipe)
-
     else:
         raise Exception(f"Unsupported provider: {provider}")
 
-# Prompt template
-prompt_template = PromptTemplate.from_template(
-    "You are an expert newsletter writer. Write a brief newsletter for {audience}.\n"
-    "Include the following facts: {stats}\n\n"
-    "Format:\nSubject: <subject line>\n\nBody:\n<email body>"
-)
-
-# Save PDF
+# --- PDF Generator ---
 def generate_pdf(subject, body):
     pdf = FPDF()
     pdf.add_page()
@@ -86,45 +85,18 @@ def generate_pdf(subject, body):
     buffer.seek(0)
     return buffer
 
-# Azure Function
-app = func.FunctionApp()
+# --- Email Sender ---
+def send_email(subject, body, pdf_bytes):
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = os.getenv("EMAIL_FROM")
+    msg["To"] = os.getenv("EMAIL_RECIPIENTS")
+    msg.set_content(body)
 
-@app.function_name(name="GenerateNewsletterPDF")
-@app.route(route="generate-newsletter", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
-def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
-    try:
-        data = req.get_json()
+    # Attach PDF
+    msg.add_attachment(pdf_bytes.read(), maintype="application", subtype="pdf", filename="newsletter.pdf")
 
-        audience = data.get("audience", "a general audience")
-        stats = data.get("stats", "")
-        provider = data.get("provider", "openai")
-        model = data.get("model", None)
-        temperature = float(data.get("temperature", 0.7))
-
-        llm = initialize_llm(provider=provider, model_name=model, temperature=temperature)
-        chain = LLMChain(llm=llm, prompt=prompt_template)
-
-        # Generate content
-        raw_output = chain.run({"audience": audience, "stats": stats})
-        if "Subject:" in raw_output and "Body:" in raw_output:
-            subject = raw_output.split("Subject:")[1].split("Body:")[0].strip()
-            body = raw_output.split("Body:")[1].strip()
-        else:
-            subject, body = "Newsletter Template", raw_output.strip()
-
-        # Generate PDF
-        pdf_stream = generate_pdf(subject, body)
-
-        # Build response
-        filename = f"newsletter-{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-        return func.HttpResponse(
-            body=pdf_stream.read(),
-            headers={
-                "Content-Type": "application/pdf",
-                "Content-Disposition": f'attachment; filename="{filename}"'
-            },
-            status_code=200
-        )
-
-    except Exception as e:
-        return func.HttpResponse(f"Error: {str(e)}", status_code=500)
+    with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT", "587"))) as server:
+        server.starttls()
+        server.login(os.getenv("SMTP_USERNAME"), os.getenv("SMTP_PASSWORD"))
+        server.send_message(msg)

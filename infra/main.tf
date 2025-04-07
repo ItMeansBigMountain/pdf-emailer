@@ -43,15 +43,18 @@ resource "azurerm_linux_function_app" "pdf_emailer" {
   }
 
   app_settings = {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true"
     "FUNCTIONS_WORKER_RUNTIME" = "python"
-    "SMTP_SERVER"              = "smtp.office365.com"
+    "SMTP_SERVER"              = "smtp.google.com"
     "SMTP_PORT"                = "587"
+    "OPENAI_API_KEY"           = var.OPENAI_API_KEY
+    "HUGGINGFACEHUB_API_TOKEN" = var.HUGGINGFACEHUB_API_TOKEN
+    "ANTHROPIC_API_KEY"        = var.ANTHROPIC_API_KEY
+    "COHERE_API_KEY"           = var.COHERE_API_KEY
     "SMTP_USERNAME"            = var.smtp_username
     "SMTP_PASSWORD"            = var.smtp_password
     "EMAIL_FROM"               = var.email_from
     "EMAIL_RECIPIENTS"         = var.email_recipients
-    "LLM_API_KEY"              = var.llm_api_key
-    "LLM_ENDPOINT"             = var.llm_endpoint
     "SCHEDULE"                 = var.schedule
   }
 }

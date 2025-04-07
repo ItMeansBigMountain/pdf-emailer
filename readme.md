@@ -1,49 +1,52 @@
-# Project Structure
+# 📧 Azure PDF Emailer
+
+An Azure-based serverless application that generates newsletters as PDFs using LLMs (Large Language Models) and sends them via email using SMTP. This project leverages Azure Functions, Terraform for infrastructure as code, and Python for the application logic.
+
+---
+
+## 📂 Project Structure
+
 ```
-azure-pdf-emailer/
-├── .gitignore               # Git ignore file
+pdf-emailer/
+├── .gitignore               # Files and directories to ignore in Git
 ├── README.md                # Project documentation
-├── function_app/
-│   ├── function_app.py      # Main Azure Function code
-│   ├── host.json            # Azure Function host configuration
-│   ├── local.settings.json  # Local development settings (excluded from git)
+├── function_app/            # Azure Function application code
+│   ├── __init__.py          # Entry point for the Azure Function
+│   ├── utils.py             # Helper functions for PDF generation and LLM integration
 │   ├── requirements.txt     # Python dependencies
-│   └── .funcignore          # Azure Functions ignore file
-├── infra/
-│   ├── main.tf                  # Main Terraform configuration file
-│   ├── variables.tf             # Terraform variables definition
-│   ├── outputs.tf               # Terraform outputs definition
-│   ├── terraform.tfvars         # Terraform variables values (excluded from git)
-│   └── .README.md          # Azure Functions ignore file
-├── scripts/
-│   ├── deploy.sh            # Deployment automation script
-│   └── test_email.py        # Script to test email functionality
-├── docs/
-│   ├── cost_analysis.md     # Detailed cost analysis
+│   ├── host.json            # Azure Function host configuration
+│   ├── local.settings.json  # Local development settings (excluded from Git)
+│   ├── .funcignore          # Files to ignore during Azure Function deployment
+│   └── test.py              # Script for testing the function locally
+├── infra/                   # Terraform configuration for Azure infrastructure
+│   ├── main.tf              # Main Terraform configuration
+│   ├── variables.tf         # Terraform variables definition
+│   ├── outputs.tf           # Terraform outputs definition
+│   ├── backend.tf           # Terraform backend configuration
+│   ├── terraform.tfvars     # Terraform variable values (excluded from Git)
+│   └── .terraform/          # Terraform state and provider files
+├── templates/               # Email templates
+│   └── email_template.html  # HTML template for email content
+├── docs/                    # Documentation
 │   ├── setup_guide.md       # Step-by-step setup instructions
-│   └── images/              # Documentation images
-│       └── architecture.png # System architecture diagram
-└── templates/
-    └── email_template.html  # HTML template for emails
+│   ├── cost_analysis.md     # Cost analysis and optimization tips
+│   └── images/              # Images for documentation
+└── scripts/                 # Utility scripts
+    └── deploy.sh            # Script for automating deployment
 ```
-
-
-
-### 📄 `README.md` — Azure PDF Generator and Email Sender
-
-# 📧 Azure PDF Generator and Email Sender
-
-An Azure-based serverless app that uses Python to generate PDFs using LLMs and email them via SMTP on a scheduled basis.
 
 ---
 
 ## ✅ Prerequisites
 
-- Azure account with active subscription
+Before you begin, ensure you have the following:
+
+- An Azure account with an active subscription
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) installed
-- [Terraform](https://developer.hashicorp.com/terraform/install) installed
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) installed
+- [Python 3.10+](https://www.python.org/downloads/) installed
+- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) installed
 - [Git](https://git-scm.com/) installed
-- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local)
 
 ---
 
@@ -52,94 +55,123 @@ An Azure-based serverless app that uses Python to generate PDFs using LLMs and e
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-repo/azure-pdf-emailer.git
-cd azure-pdf-emailer
+git clone https://github.com/your-repo/pdf-emailer.git
+cd pdf-emailer
 ```
 
-### 2. Initialize Terraform
+### 2. Configure Environment Variables
 
-```bash
-cd infra
-terraform init
-```
-
-### 3. Configure Environment Variables
-
-Create a file `terraform.tfvars`:
+Update the `infra/terraform.tfvars` file with your configuration:
 
 ```hcl
-SMTP_USERNAME     = "your-email@example.com"
-SMTP_PASSWORD     = "your-email-password"
-LLM_API_KEY       = "your-openai-api-key"
-EMAIL_RECIPIENTS  = "recipient1@example.com,recipient2@example.com"
+resource_group_name  = "pdf-emailer-rg"
+location             = "East US"
+smtp_username        = "your-email@example.com"
+smtp_password        = "your-email-password"
+email_from           = "notifications@yourcompany.com"
+email_recipients     = "recipient1@example.com,recipient2@example.com"
+OPENAI_API_KEY       = "your-openai-api-key"
+schedule             = "0 0 9 * * *"
 ```
 
-### 4. Define Python Dependencies
+### 3. Install Python Dependencies
 
-Create `requirements.txt` in the `function_app/` directory:
-
-```txt
-azure-functions
-openai
-fpdf
-azure-storage-blob
-```
-
----
-
-## 📦 Deploy Infrastructure
-
-```bash
-cd infra
-terraform apply
-```
-
-📌 **Note**: Save the function app URL from Terraform output.
-
----
-
-## 🧠 Deploy the Function Code
+Navigate to the `function_app` directory and install the required Python packages:
 
 ```bash
 cd function_app
-func azure functionapp publish pdf-emailer-function --python
+pip install -r requirements.txt
+```
+
+### 4. Initialize Terraform
+
+Navigate to the `infra` directory and initialize Terraform:
+
+```bash
+cd ../infra
+terraform init
 ```
 
 ---
 
-## ✅ Verify Deployment
+## 📦 Deployment
 
-1. Visit Azure Portal → Function App → Overview
-2. Confirm function is running
-3. Monitor logs under "Logs" tab
-4. Wait for scheduled time to check email delivery
+### 1. Deploy Infrastructure
+
+Run the following command to deploy the Azure infrastructure:
+
+```bash
+terraform apply
+```
+
+Save the output, which includes the function app URL.
+
+### 2. Deploy the Azure Function
+
+Navigate to the `function_app` directory and deploy the function:
+
+```bash
+cd ../function_app
+func azure functionapp publish <function-app-name> --python
+```
+
+---
+
+## 🧪 Testing
+
+### 1. Test Locally
+
+Run the `test.py` script to test the newsletter generation locally:
+
+```bash
+python test.py
+```
+
+### 2. Verify Deployment
+
+- Visit the Azure Portal and navigate to your Function App.
+- Check the logs to ensure the function is running correctly.
+- Verify that emails are being sent as expected.
 
 ---
 
 ## 🔧 Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| Function not executing | Check logs in Azure Portal |
-| Email not sending | Verify SMTP credentials + recipient emails |
-| PDF not generated | Ensure OpenAI key is valid and reachable |
+| Issue                  | Possible Fix                                                                 |
+|------------------------|-----------------------------------------------------------------------------|
+| Function not executing | Check the logs in the Azure Portal for errors.                             |
+| Email not sending      | Verify SMTP credentials and recipient email addresses.                     |
+| PDF not generated      | Ensure the LLM API key is valid and the model is reachable.                |
+| Terraform errors       | Ensure Azure CLI is logged in and the correct subscription is selected.    |
 
 ---
 
 ## 🔐 Best Practices
 
-- 🔑 **Secrets** stored securely in Azure App Settings
-- 📊 **Logging** enabled in Function App for debugging
-- 🤖 **LLM** API key stored in environment, fallback if fails
-- ✉️ **Email template** used from HTML file for flexibility
+- Store sensitive information (e.g., API keys, SMTP credentials) securely in Azure App Settings.
+- Enable logging in the Azure Function for better debugging.
+- Use a fallback mechanism for LLM failures to ensure reliability.
+- Regularly monitor Azure costs and optimize resource usage.
 
 ---
 
-## 📚 Docs
+## 📚 Documentation
 
-- `docs/setup_guide.md`: Setup walkthrough
-- `docs/cost_analysis.md`: Real usage and billing estimates
-- `templates/email_template.html`: Editable email body
-- `scripts/test_email.py`: Send test emails
+- [Setup Guide](docs/setup_guide.md): Detailed setup instructions
+- [Cost Analysis](docs/cost_analysis.md): Cost breakdown and optimization tips
+- [Email Template](templates/email_template.html): Editable HTML email template
 
 ---
+
+## 🛠️ Future Enhancements
+
+- Add a web dashboard for managing newsletters and recipients.
+- Implement analytics for email delivery and engagement.
+- Support additional LLM providers and models.
+- Add more robust error handling and retry mechanisms.
+
+---
+
+## 📝 License
+
+This project is licensed under the [MIT License](LICENSE).
