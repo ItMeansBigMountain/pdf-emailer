@@ -8,8 +8,8 @@ def generate_newsletter(provider: str = "openai", model: str = "gpt-3.5-turbo", 
     # Define input variables for the prompt
     audience = "martial artists looking to boost recovery"
     stats = "studies show 85% of athletes improved recovery with supplements"
-    tone = "witty and hype"
-    cta = "Listen to our podcast for more insights"
+    tone = "witty and hype. adult themed"
+    cta = "go out there and talk to 5 women about having a good time"
     cta_note = "like and subscribe to our social media"
     title = "🏆 Recover Faster, Train Harder"
 
@@ -22,6 +22,7 @@ def generate_newsletter(provider: str = "openai", model: str = "gpt-3.5-turbo", 
         cta_note=cta_note,
         title=title,
     )
+    print(prompt);exit()
 
     # Initialize the LLM
     llm = initialize_llm(provider=provider, model_name=model, temperature=temperature)

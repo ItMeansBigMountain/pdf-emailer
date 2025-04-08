@@ -32,7 +32,11 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
         )
 
         # Initialize LLM and generate content
-        llm = initialize_llm(provider=provider, model_name=model, temperature=temperature)
+        llm = initialize_llm(
+            provider=provider,
+            model_name=model,
+            temperature=temperature
+        )
         raw_output = llm.invoke(filled_prompt).content
 
         # Extract subject and body from the LLM output

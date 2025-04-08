@@ -1,6 +1,5 @@
 provider "azurerm" {
   features {}
-  subscription_id = data.azurerm_subscription.Email_List_Subscription.id
 }
 
 output "current_subscription_id" {
@@ -45,15 +44,15 @@ resource "azurerm_linux_function_app" "pdf_emailer" {
   app_settings = {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true"
     "FUNCTIONS_WORKER_RUNTIME" = "python"
-    "SMTP_SERVER"              = "smtp.google.com"
-    "SMTP_PORT"                = "587"
+    "SMTP_SERVER"              = var.SMTP_SERVER
+    "SMTP_PORT"                = var.SMTP_PORT
     "OPENAI_API_KEY"           = var.OPENAI_API_KEY
     "HUGGINGFACEHUB_API_TOKEN" = var.HUGGINGFACEHUB_API_TOKEN
     "ANTHROPIC_API_KEY"        = var.ANTHROPIC_API_KEY
     "COHERE_API_KEY"           = var.COHERE_API_KEY
-    "SMTP_USERNAME"            = var.smtp_username
-    "SMTP_PASSWORD"            = var.smtp_password
-    "EMAIL_FROM"               = var.email_from
+    "SMTP_USERNAME"            = var.SMTP_USERNAME
+    "SMTP_PASSWORD"            = var.SMTP_PASSWORD
+    "EMAIL_FROM"               = var.EMAIL_FROM
     "EMAIL_RECIPIENTS"         = var.email_recipients
     "SCHEDULE"                 = var.schedule
   }

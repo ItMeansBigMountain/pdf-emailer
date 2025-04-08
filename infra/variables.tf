@@ -28,28 +28,6 @@ variable "function_app_name" {
   description = "Name of the Azure Linux Function App"
 }
 
-variable "smtp_username" {
-  type        = string
-  description = "SMTP username (e.g., email account for sending)"
-  sensitive   = true
-}
-
-variable "smtp_password" {
-  type        = string
-  description = "SMTP password"
-  sensitive   = true
-}
-
-variable "email_from" {
-  type        = string
-  description = "Sender email address"
-}
-
-variable "email_recipients" {
-  type        = string
-  description = "Comma-separated recipient list"
-}
-
 variable "schedule" {
   type        = string
   default     = "0 0 9 * * *"
