@@ -62,20 +62,3 @@ resource "azurerm_storage_container" "pdf_container" {
   storage_account_name  = azurerm_storage_account.pdf_emailer.name
   container_access_type = "private"
 }
-
-output "function_app_url" {
-  value = azurerm_linux_function_app.pdf_emailer.default_hostname
-}
-
-
-resource "null_resource" "upload_function_code" {
-  depends_on = [azurerm_linux_function_app.pdf_emailer , azurerm_storage_account.pdf_emailer, azurerm_service_plan.pdf_emailer]
-
-  provisioner "local-exec" {
-    command = <<EOT
-      cd ../function_app
-      pip install -r requirements.txt --target="./.python_packages/lib/site-packages"
-      func azure functionapp publish ${azurerm_linux_function_app.pdf_emailer.name} --python
-    EOT
-  }
-}
