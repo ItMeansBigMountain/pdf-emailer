@@ -10,8 +10,8 @@ openai
 langchain-openai
 langchain-anthropic
 langchain-cohere
-langchain-community
-langchain-huggingface
+# langchain-community
+# langchain-huggingface
 
 # Markdown to HTML
 markdown2
