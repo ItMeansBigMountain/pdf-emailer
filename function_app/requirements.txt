@@ -12,7 +12,6 @@ langchain-anthropic
 langchain-cohere
 langchain-community
 langchain-huggingface
-transformers
 
-# HTML GENERATION
+# Markdown to HTML
 markdown2
