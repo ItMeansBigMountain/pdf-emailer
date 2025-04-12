@@ -6,6 +6,7 @@ def generate_newsletter(provider: str = "openai", model: str = "gpt-3.5-turbo", 
     """Generates a newsletter's subject and body for a given audience and stats."""
 
     # Define input variables for the prompt
+    custom_prompt = "write a newsletter for a martial arts gym"
     audience = "martial artists looking to boost recovery"
     stats = "studies show 85% of athletes improved recovery with supplements"
     tone = "witty and hype. adult themed"
@@ -15,6 +16,7 @@ def generate_newsletter(provider: str = "openai", model: str = "gpt-3.5-turbo", 
 
     # Format the prompt using the template
     prompt = newsletter_prompt.format(
+        custom_prompt=custom_prompt,
         audience=audience,
         stat=stats,
         tone=tone,
@@ -41,7 +43,7 @@ if __name__ == "__main__":
         print(f"{"-"*50}\nGenerated Newsletter")
         
         # Send the email with the generated newsletter
-        send_email(subject, body)
+        # send_email(subject, body)
         print(f"Subject: {subject}\n")
         print(f"Body Preview:\n{body[:100]}...\n")
 

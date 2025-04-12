@@ -11,15 +11,16 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # Parse request data
         data = req.get_json()
-        audience = data.get("audience", "a general audience")
-        stats = data.get("stats", "")
         provider = data.get("provider", "openai")
         model = data.get("model", "gpt-3.5-turbo")
+        title = data.get("title", "Your Monthly Newsletter")
         temperature = float(data.get("temperature", 0.7))
+        audience = data.get("audience", "a general audience")
+        stats = data.get("stats", "")
         tone = data.get("tone", "informative")
         cta = data.get("cta", "Learn more on our website!")
         cta_note = data.get("cta_note", "Follow us for updates")
-        title = data.get("title", "Your Monthly Newsletter")
+        custom_prompt = data.get("custom_prompt", "Generate a newsletter")
 
         # Fill the prompt template
         filled_prompt = newsletter_prompt.format(

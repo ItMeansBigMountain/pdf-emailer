@@ -38,29 +38,33 @@ variable "OPENAI_API_KEY" {
   type        = string
   default     = ""
   description = "API KEYS FOR OPENAI_API_KEY"
+  sensitive   = true
 }
 
 variable "HUGGINGFACEHUB_API_TOKEN" {
   type        = string
   default     = ""
   description = "API KEYS FOR HUGGINGFACEHUB_API_TOKEN"
+  sensitive   = true
 }
 
 variable "ANTHROPIC_API_KEY" {
   type        = string
   default     = ""
   description = "API KEYS FOR ANTHROPIC_API_KEY"
+  sensitive   = true
 }
 
 variable "COHERE_API_KEY" {
   type        = string
   default     = ""
   description = "API KEYS FOR COHERE_API_KEY"
+  sensitive   = true
 }
 
 variable "SMTP_SERVER" {
   type        = string
-  default     = "smtp.google.com"
+  default     = "smtp.gmail.com"
   description = "SMTP server address"
 }
 
@@ -94,4 +98,11 @@ variable "EMAIL_RECIPIENTS" {
   type        = string
   default     = "trapiistan@gmail.com,classical.echos@gmail.com"
   description = "Comma-separated recipient list"
+}
+
+variable "AZURE_SUBSCRIPTION_ID" {
+  type        = string
+  default     = ""
+  description = "Current Azure Subscription ID"
+  sensitive   = true
 }

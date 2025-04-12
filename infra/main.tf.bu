@@ -25,7 +25,6 @@ resource "azurerm_service_plan" "pdf_emailer" {
 }
 
 resource "azurerm_linux_function_app" "pdf_emailer" {
-  depends_on = [ azurerm_storage_account.pdf_emailer, azurerm_service_plan.pdf_emailer ]
   name                       = var.function_app_name
   location                   = var.location
   resource_group_name        = var.resource_group_name
@@ -57,7 +56,6 @@ resource "azurerm_linux_function_app" "pdf_emailer" {
 }
 
 resource "azurerm_storage_container" "pdf_container" {
-  depends_on = [azurerm_linux_function_app.pdf_emailer, azurerm_storage_account.pdf_emailer]
   name                  = "generated-pdfs"
   storage_account_name  = azurerm_storage_account.pdf_emailer.name
   container_access_type = "private"
@@ -69,7 +67,7 @@ output "function_app_url" {
 
 
 resource "null_resource" "upload_function_code" {
-  depends_on = [azurerm_linux_function_app.pdf_emailer , azurerm_storage_account.pdf_emailer, azurerm_service_plan.pdf_emailer]
+  depends_on = [azurerm_linux_function_app.pdf_emailer]
 
   provisioner "local-exec" {
     command = <<EOT
