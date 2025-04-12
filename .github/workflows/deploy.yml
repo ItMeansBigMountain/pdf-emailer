@@ -33,5 +33,6 @@ jobs:
       with:
         app-name: pdf-emailer-func
         package: function_app.zip
-      env:
-        AZURE_FUNCTIONAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+        publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+        scm-do-build-during-deployment: true
+        enable-oryx-build: true
