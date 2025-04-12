@@ -21,6 +21,7 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
         cta = data.get("cta", "Learn more on our website!")
         cta_note = data.get("cta_note", "Follow us for updates")
         custom_prompt = data.get("custom_prompt", "Generate a newsletter")
+        recepients = data.get("recipients", os.getenv("EMAIL_RECIPIENTS"))
 
         # Fill the prompt template
         filled_prompt = newsletter_prompt.format(
@@ -29,7 +30,8 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
             tone=tone,
             cta=cta,
             cta_note=cta_note,
-            title=title
+            title=title,
+            custom_prompt=custom_prompt
         )
 
         # Initialize LLM and generate content
@@ -44,7 +46,7 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
         subject, body = extract_subject_body(raw_output)
 
         # Send Email
-        send_email(subject, body)
+        send_email(subject, body, recipients=recepients)
 
         # Return a success response
         return func.HttpResponse(

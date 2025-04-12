@@ -71,7 +71,7 @@ def initialize_llm(provider: str, model_name: str = None, temperature=0.7):
         raise Exception(f"Unsupported provider: {provider}")
 
 # --- Email Sender ---
-def send_email(subject, body):
+def send_email(subject, body, recipients=None):
     """Sends an email with the given subject and body, converting Markdown to HTML if necessary."""
     try:
         # Convert Markdown to HTML
@@ -81,7 +81,7 @@ def send_email(subject, body):
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = os.getenv("EMAIL_FROM")
-        msg["To"] = os.getenv("EMAIL_RECIPIENTS")
+        msg["To"] = recipients
         msg.set_content(body)  # Plain text fallback
         msg.add_alternative(html_body, subtype="html")  # HTML content
 
