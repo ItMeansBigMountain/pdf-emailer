@@ -60,4 +60,4 @@ jobs:
         # AZURE_FUNCTION_BASE_URL: ${{ secrets.AZURE_FUNCTION_BASE_URL }} 
         # AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY }}  
       run: |
-        python -m unittest discover -s function_app -p "integration_test.py"
+        python3 function_app/integration_test.py

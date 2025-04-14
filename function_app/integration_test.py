@@ -34,7 +34,6 @@ class TestPostDeploymentValidation(unittest.TestCase):
         print(f"Response Status Code: {response.status_code}")
         print(f"Response Text: {response.content.decode('utf-8')}")
         print(f"request URL: {response.url}")
-        print(f"request Headers: {response.request.headers}")
 
         # Check if the response is successful
         self.assertEqual(response.status_code, 200)

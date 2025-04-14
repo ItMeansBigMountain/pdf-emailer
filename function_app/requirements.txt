@@ -1,11 +1,13 @@
+# Azure
+python-dotenv
 azure-functions
 fpdf
 
-# LangChain core
+# AI Management Framework
 langchain
 langchain-core
 
-# Providers (install only what you use)
+# AI Providers
 openai
 langchain-openai
 langchain-anthropic
@@ -13,5 +15,11 @@ langchain-cohere
 # langchain-community
 # langchain-huggingface
 
-# Markdown to HTML
+# Email Genaration
 markdown2
+# langchain-email
+
+# Automated Tests
+requests
+pytest
+pytest-asyncio
