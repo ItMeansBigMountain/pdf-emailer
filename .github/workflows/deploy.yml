@@ -36,3 +36,28 @@ jobs:
         publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
         scm-do-build-during-deployment: true
         enable-oryx-build: true
+
+  post-deployment-test:
+    runs-on: ubuntu-latest
+    needs: build-and-deploy  # Ensure this job runs after the deployment job
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.9"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests unittest
+
+    - name: Run integration tests
+      # env:
+        # AZURE_FUNCTION_BASE_URL: ${{ secrets.AZURE_FUNCTION_BASE_URL }} 
+        # AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY }}  
+      run: |
+        python -m unittest discover -s function_app -p "integration_test.py"

@@ -9,12 +9,12 @@ app = func.FunctionApp()
 @app.route(route="generate-newsletter", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
 def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
     
-    # DEBUG
-    data = req.get_json()
-    return func.HttpResponse(
-    f"Debug: Function hit\n\nReceived: {data}",
-    status_code=200
-)
+#     # DEBUG
+#     data = req.get_json()
+#     return func.HttpResponse(
+#     f"Debug: Function hit\n\nReceived: {data}",
+#     status_code=200
+# )
 
     try:
         # Parse request data
@@ -62,7 +62,7 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
                 f"Newsletter sent successfully!\n\n"
                 f"Subject: {subject}\n"
                 f"Body : {body}" 
-                f"Recipients: {os.getenv('EMAIL_RECIPIENTS')}\n"
+                f"Recipients: {recepients}\n"
             ),
             status_code=200
         )

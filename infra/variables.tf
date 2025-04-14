@@ -106,3 +106,16 @@ variable "AZURE_SUBSCRIPTION_ID" {
   description = "Current Azure Subscription ID"
   sensitive   = true
 }
+
+variable "AZURE_FUNCTION_KEY" {
+  type        = string
+  description = "Azure Function Key for authentication"
+  sensitive   = true
+}
+
+variable "AZURE_FUNCTION_BASE_URL" {
+  type        = string
+  description = "Base URL of the Azure Function App"
+  sensitive   = true
+  default = "pdf-emailer-func.azurewebsites.net"
+}
