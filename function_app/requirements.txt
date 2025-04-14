@@ -21,5 +21,3 @@ markdown2
 
 # Automated Tests
 requests
-pytest
-pytest-asyncio
