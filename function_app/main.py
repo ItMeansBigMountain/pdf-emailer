@@ -8,14 +8,6 @@ app = func.FunctionApp()
 @app.function_name(name="GenerateNewsletter")
 @app.route(route="generate-newsletter", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
 def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
-    
-#     # DEBUG
-#     data = req.get_json()
-#     return func.HttpResponse(
-#     f"Debug: Function hit\n\nReceived: {data}",
-#     status_code=200
-# )
-
     try:
         # Parse request data
         data = req.get_json()
