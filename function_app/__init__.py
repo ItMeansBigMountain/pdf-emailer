@@ -6,7 +6,7 @@ from utils import initialize_llm, newsletter_prompt, send_email, extract_subject
 app = func.FunctionApp()
 
 @app.function_name(name="GenerateNewsletter")
-@app.route(route="generate-newsletter", auth_level=func.AuthLevel.FUNCTION, methods=["POST"])
+@app.route(route="generate-newsletter", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
 def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # Parse request data

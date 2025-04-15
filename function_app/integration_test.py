@@ -3,10 +3,18 @@ import requests
 import pytest
 from dotenv import load_dotenv
 
-load_dotenv(".env")
+load_dotenv()
 
-BASE_URL = "https://" + os.getenv("AZURE_FUNCTION_BASE_URL")
-FUNCTION_KEY = os.getenv("AZURE_FUNCTION_KEY")
+
+@pytest.fixture
+def get_env_vars():
+    base_url = os.getenv("AZURE_FUNCTION_BASE_URL")
+    function_key = os.getenv("AZURE_FUNCTION_KEY")
+
+    return {
+        "BASE_URL": "https://" + base_url,
+        "FUNCTION_KEY": function_key
+    }
 
 
 @pytest.fixture
@@ -26,9 +34,13 @@ def newsletter_payload():
     }
 
 
-def test_generate_newsletter_endpoint(newsletter_payload):
+def test_generate_newsletter_endpoint(get_env_vars, newsletter_payload):
+    BASE_URL = get_env_vars["BASE_URL"]
+    FUNCTION_KEY = get_env_vars["FUNCTION_KEY"]
+
     response = requests.post(
-        f"{BASE_URL}/api/generate-newsletter?code={FUNCTION_KEY}",
+        # f"{BASE_URL}/api/generate-newsletter?code={FUNCTION_KEY}",
+        f"{BASE_URL}/api/generate-newsletter",
         json=newsletter_payload
     )
 
