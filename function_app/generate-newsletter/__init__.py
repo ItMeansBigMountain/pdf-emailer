@@ -9,7 +9,7 @@ app = func.FunctionApp()
 
 @app.function_name(name="GenerateNewsletter")
 @app.route(route="generate-newsletter", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
-def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
+def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # Parse request data
         data = req.get_json()
