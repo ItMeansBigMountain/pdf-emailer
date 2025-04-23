@@ -4,14 +4,12 @@ import traceback
 import logging
 from .helper_functions import initialize_llm, newsletter_prompt, send_email, extract_subject_body
 
-# INIT AZURE FUNCTIONS
 app = func.FunctionApp()
 
 @app.function_name(name="GenerateNewsletter")
 @app.route(route="generate-newsletter", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
-def main(req: func.HttpRequest) -> func.HttpResponse:
+def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
     try:
-        # Parse request data
         data = req.get_json()
         provider = data.get("provider", "openai")
         model = data.get("model", "gpt-3.5-turbo")
@@ -23,9 +21,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         cta = data.get("cta", "Learn more on our website!")
         cta_note = data.get("cta_note", "Follow us for updates")
         custom_prompt = data.get("custom_prompt", "Generate a newsletter")
-        recepients = data.get("recipients", os.getenv("EMAIL_RECIPIENTS"))
+        recipients = data.get("recipients", os.getenv("EMAIL_RECIPIENTS"))
 
-        # Fill the prompt template
         filled_prompt = newsletter_prompt.format(
             audience=audience,
             stat=stats,
@@ -36,28 +33,17 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             custom_prompt=custom_prompt
         )
 
-        # Initialize LLM and generate content
         llm = initialize_llm(
             provider=provider,
             model_name=model,
             temperature=temperature
         )
         raw_output = llm.invoke(filled_prompt).content
-
-        # Extract subject and body from the LLM output
         subject, body = extract_subject_body(raw_output)
+        send_email(subject, body, recipients=recipients)
 
-        # Send Email
-        send_email(subject, body, recipients=recepients)
-
-        # Return a success response
         return func.HttpResponse(
-            body=(
-                f"Newsletter sent successfully!\n\n"
-                f"Subject: {subject}\n"
-                f"Body : {body}" 
-                f"Recipients: {recepients}\n"
-            ),
+            body=f"Newsletter sent successfully!\n\nSubject: {subject}\nBody : {body}\nRecipients: {recipients}",
             status_code=200
         )
 
