@@ -43,7 +43,6 @@ def main():
         )
 
         print(f"Response Status Code: {response.status_code}")
-        print(f"Response Content: {response}")
         print(f"Response Text: {response.content.decode('utf-8')}")
         assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
     except Exception as e:

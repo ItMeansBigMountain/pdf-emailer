@@ -1,5 +1,7 @@
 import os
 import azure.functions as func
+import traceback
+import logging
 from utils import initialize_llm, newsletter_prompt, send_email, extract_subject_body
 
 # INIT AZURE FUNCTIONS
@@ -60,4 +62,5 @@ def generate_newsletter(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     except Exception as e:
-        return func.HttpResponse(body=str(e), status_code=500)
+        logging.error("Unhandled exception:\n%s", traceback.format_exc())
+        return func.HttpResponse(body=f"Internal Server Error\n\n{traceback.format_exc()}", status_code=500)
