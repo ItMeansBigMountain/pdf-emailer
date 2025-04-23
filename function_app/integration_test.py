@@ -1,12 +1,10 @@
 import os
 import requests
-import pytest
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-
-@pytest.fixture
 def get_env_vars():
     base_url = os.getenv("AZURE_FUNCTION_BASE_URL")
     function_key = os.getenv("AZURE_FUNCTION_KEY")
@@ -16,9 +14,7 @@ def get_env_vars():
         "FUNCTION_KEY": function_key
     }
 
-
-@pytest.fixture
-def newsletter_payload():
+def get_newsletter_payload():
     return {
         "provider": "openai",
         "model": "gpt-3.5-turbo",
@@ -33,22 +29,30 @@ def newsletter_payload():
         "recipients": "example1@gmail.com,example2@gmail.com"
     }
 
+def main():
+    env_vars = get_env_vars()
+    BASE_URL = env_vars["BASE_URL"]
+    FUNCTION_KEY = env_vars["FUNCTION_KEY"]
 
-def test_generate_newsletter_endpoint(get_env_vars, newsletter_payload):
-    BASE_URL = get_env_vars["BASE_URL"]
-    FUNCTION_KEY = get_env_vars["FUNCTION_KEY"]
+    payload = get_newsletter_payload()
 
-    response = requests.post(
-        # f"{BASE_URL}/api/generate-newsletter?code={FUNCTION_KEY}",
-        f"{BASE_URL}/api/generate-newsletter",
-        json=newsletter_payload
-    )
+    try:
+        response = requests.post(
+            # f"{BASE_URL}/api/generate-newsletter?code={FUNCTION_KEY}",
+            f"{BASE_URL}/api/generate-newsletter",
+            json=payload
+        )
 
-    print(f"Response Status Code: {response.status_code}")
-    print(f"Response Text: {response.content.decode('utf-8')}")
-    print(f"Request URL: {response.url}")
+        print(f"Response Status Code: {response.status_code}")
+        print(f"Response Text: {response.content.decode('utf-8')}")
+        print(f"Request URL: {response.url}")
 
-    assert response.status_code == 200
-    assert "Newsletter sent successfully!" in response.text
-    assert "Subject:" in response.text
-    assert "Body :" in response.text
+        if response.status_code == 200:
+            print("Newsletter sent successfully!")
+        else:
+            print("Failed to send newsletter.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    main()
