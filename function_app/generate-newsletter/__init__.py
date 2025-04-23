@@ -2,7 +2,7 @@ import os
 import azure.functions as func
 import traceback
 import logging
-from utils import initialize_llm, newsletter_prompt, send_email, extract_subject_body
+from .helper_functions import initialize_llm, newsletter_prompt, send_email, extract_subject_body
 
 # INIT AZURE FUNCTIONS
 app = func.FunctionApp()
