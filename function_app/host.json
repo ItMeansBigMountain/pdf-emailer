@@ -3,20 +3,13 @@
     "logging": {
         "applicationInsights": {
             "samplingSettings": {
-                "isEnabled": false,
+                "isEnabled": true,
                 "maxTelemetryItemsPerSecond": 5
             }
         },
         "logLevel": {
             "default": "Information",
             "Function": "Information"
-        }
-    },
-    "extensions": {
-        "timers": {
-            "scheduleMonitor": {
-                "enabled": true
-            }
         }
     }
 }

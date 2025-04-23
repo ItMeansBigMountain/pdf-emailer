@@ -38,19 +38,14 @@ def main():
 
     try:
         response = requests.post(
-            # f"{BASE_URL}/api/generate-newsletter?code={FUNCTION_KEY}",
-            f"{BASE_URL}/api/generate-newsletter",
+            f"{BASE_URL}/api/generate-newsletter?code={FUNCTION_KEY}",
             json=payload
         )
 
         print(f"Response Status Code: {response.status_code}")
+        print(f"Response Content: {response}")
         print(f"Response Text: {response.content.decode('utf-8')}")
-        print(f"Request URL: {response.url}")
-
-        if response.status_code == 200:
-            print("Newsletter sent successfully!")
-        else:
-            print("Failed to send newsletter.")
+        assert response.status_code == 200, f"Expected status code 200, got {response.status_code}"
     except Exception as e:
         print(f"An error occurred: {e}")
 
