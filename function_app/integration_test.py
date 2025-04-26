@@ -26,7 +26,7 @@ def get_newsletter_payload():
         "cta": "Listen to our podcast for more insights",
         "cta_note": "like and subscribe to our social media",
         "custom_prompt": "write a newsletter for a martial arts gym",
-        "recipients": os.getenv("AZURE_FUNCTION_EMAIL_RECIPIENTS")
+        "recipients": "trapiistan@gmail.com,classicalechos@gmail.com"
     }
 
 def main():
