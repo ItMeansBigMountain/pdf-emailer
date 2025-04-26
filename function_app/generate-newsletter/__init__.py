@@ -4,10 +4,6 @@ import traceback
 import logging
 from .helper_functions import initialize_llm, newsletter_prompt, send_email, extract_subject_body
 
-app = func.FunctionApp()
-
-@app.function_name(name="GenerateNewsletter")
-@app.route(route="generate-newsletter", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         data = req.get_json()
