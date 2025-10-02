@@ -1,3 +1,9 @@
+test using 
+
+curl.exe -s -X POST "http://localhost:7071/api/generate-newsletter" -H "content-type: application/json" -d "{\"allow_web\":true,\"sources\":[\"coindesk.com\",\"cointelegraph.com\",\"decrypt.co\",\"reuters.com\",\"bloomberg.com\"],\"topic\":\"crypto: BTC/ETH, DeFi, regulations, on-chain data\",\"title\":\"Crypto Weekly\",\"audience\":\"operators\",\"tone\":\"concise\",\"cta\":\"Read the full brief\",\"cta_note\":\"3-minute skim\",\"model\":\"gpt-4o-mini\"}"
+
+
+
 # pdf-emailer-func
 
 > A serverless Azure Function that generates AI-powered newsletters and sends them via email. 🌍📧
