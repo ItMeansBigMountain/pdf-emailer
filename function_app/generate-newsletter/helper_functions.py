@@ -104,3 +104,4 @@ def extract_subject_body(raw_output: str) -> tuple[str, str]:
         return subject, body
     except Exception as e:
         raise Exception(f"Error extracting subject and body: {e}")
+    
