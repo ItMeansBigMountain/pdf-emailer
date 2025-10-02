@@ -1,24 +1,47 @@
-import os, json, smtplib
+# function_app/generate_newsletter/helper_functions.py
+
+import os, json, re, smtplib
 from typing import List, Dict, Optional, Tuple
 from email.message import EmailMessage
 from dotenv import load_dotenv
 from markdown2 import markdown
-from pydantic import BaseModel, Field
+from openai import OpenAI
 
 load_dotenv()
 
 SYSTEM_INSTRUCTIONS = (
     "You are a senior newsletter editor.\n"
-    "You have the web_search tool enabled. You MUST call it at least once to fetch RECENT articles "
-    "from ONLY the allowed domains. Prefer the last 7–14 days. "
-    "Include exact source URLs in either message annotations or the search results you cite.\n"
-    "Return a structured object that matches the provided model exactly."
+    "You have the web_search tool enabled. Use it to fetch RECENT articles "
+    "from ONLY the allowed domains, prioritizing the last 7–14 days.\n"
+    "Return ONLY a JSON object with keys: subject, text, html. No prose outside JSON.\n"
+    "Subject <= 78 chars. html must be inline-friendly, no external CSS/scripts."
 )
 
-class NewsletterPayload(BaseModel):
-    subject: str = Field(..., max_length=78, description="Email subject, <=78 chars.")
-    text: str   = Field(..., description="Plaintext body for clients without HTML.")
-    html: str   = Field(..., description="Inline-friendly HTML, no external CSS/scripts.")
+NEWSLETTER_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "subject": {
+            "type": "string",
+            "description": "Email subject, <=78 chars."
+        },
+        "text": {
+            "type": "string",
+            "description": "Plaintext body for clients without HTML."
+        },
+        "html": {
+            "type": "string",
+            "description": "Inline-friendly HTML body."
+        }
+    },
+    "required": ["subject", "text", "html"],
+    "additionalProperties": False
+}
+
+def _get_openai_client() -> OpenAI:
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise RuntimeError("OPENAI_API_KEY not set")
+    return OpenAI(api_key=key)
 
 def _build_user_task(
     audience: str, tone: str, title: str, cta: str, cta_note: str,
@@ -29,126 +52,117 @@ def _build_user_task(
     return (
         f"{topic_line}\nAllowed domains only:\n{src_lines}\n\n"
         f"Audience: {audience}\nTone: {tone}\nTitle: {title}\n"
-        f"CTA label: {cta}\nCTA note: {cta_note}\nExtra instructions: {custom_prompt}\n\n"
-        "Output requirements:\n"
-        "- Use web_search with recency 14 days and restrict to the allowed domains.\n"
-        "- Synthesize a concise newsletter with this outline:\n"
-        "  1) Top 3 Headlines (1–2 lines each, include source)\n"
-        "  2) Market Moves (50–80 words)\n"
-        "  3) Quick Hits (3 bullets, 1 line each)\n"
-        "- Include the CTA at the bottom.\n"
-        "- Return ONLY the structured object with keys subject, text, html.\n"
+        f"CTA label: {cta}\nCTA note: {cta_note}\nExtra instructions: {custom_prompt}\n"
+        "Tasks:\n"
+        "1) Use web_search NOW to find the 3–6 most recent, high-signal articles from ONLY the allowed domains.\n"
+        "2) Aggregate into a concise newsletter. Include 2 short bullets of key takeaways.\n"
+        "3) Return ONLY JSON {\"subject\":\"...\",\"text\":\"...\",\"html\":\"...\"}.\n"
+        "4) Place source URLs as citations in content so they appear as annotations."
     )
 
-def _get_openai_client():
-    from openai import OpenAI
-    key = os.getenv("OPENAI_API_KEY")
-    if not key:
-        raise RuntimeError("OPENAI_API_KEY not set")
-    return OpenAI(api_key=key)
+def _extract_sources_from_resp(resp) -> List[Dict[str, str]]:
+    # Scrape URL annotations from the last assistant message
+    try:
+        msgs = [it for it in getattr(resp, "output", []) if getattr(it, "type", None) == "message"]
+        if not msgs:
+            return []
+        last = msgs[-1]
+        out: List[Dict[str, str]] = []
+        for block in getattr(last, "content", []) or []:
+            for ann in getattr(block, "annotations", []) or []:
+                if getattr(ann, "type", "") == "url" and getattr(ann, "url", ""):
+                    out.append({"title": getattr(ann, "title", "") or "", "url": ann.url, "source": ""})
+        return out
+    except Exception:
+        return []
 
-def _extract_sources_from_annotations(resp) -> List[Dict[str, str]]:
-    sources: List[Dict[str, str]] = []
-    msg_items = [it for it in getattr(resp, "output", []) if getattr(it, "type", None) == "message"]
-    if not msg_items:
-        return sources
-    last_msg = msg_items[-1]
-    for block in getattr(last_msg, "content", []) or []:
-        anns = getattr(block, "annotations", []) or []
-        for ann in anns:
-            if getattr(ann, "type", "") == "url" and getattr(ann, "url", ""):
-                sources.append({
-                    "title": getattr(ann, "title", "") or "",
-                    "url": ann.url,
-                    "source": ""
-                })
-    return sources
+def _first_json_object(s: str) -> Optional[str]:
+    # Pull the first top-level JSON object {...} to salvage minor drift
+    m = re.search(r"\{(?:[^{}]|(?R))*\}", s, re.DOTALL)
+    return m.group(0) if m else None
 
-def _extract_sources_from_search_results(resp) -> List[Dict[str, str]]:
-    # Fallback: collect from web_search_results output blocks
-    results: List[Dict[str, str]] = []
-    for item in getattr(resp, "output", []):
-        if getattr(item, "type", "") == "web_search_results":
-            for r in getattr(item, "results", []) or []:
-                url = getattr(r, "url", "") or r.get("url") if isinstance(r, dict) else ""
-                title = getattr(r, "title", "") or r.get("title") if isinstance(r, dict) else ""
-                if url:
-                    results.append({"title": title or "", "url": url, "source": ""})
-    return results
-
-def _has_search_call(resp) -> bool:
-    return any(getattr(it, "type", "") == "web_search_call" for it in getattr(resp, "output", []))
-
-def _merge_sources(a: List[Dict[str, str]], b: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    seen = set()
-    out = []
-    for s in (a + b):
-        key = s.get("url", "")
-        if key and key not in seen:
-            seen.add(key)
-            out.append(s)
-    return out
+def _safe_parse_newsletter(text: str) -> Dict[str, str]:
+    try:
+        return json.loads(text)
+    except Exception:
+        blob = _first_json_object(text or "")
+        if blob:
+            return json.loads(blob)
+        raise
 
 def generate_newsletter_via_openai_websearch(
     audience: str, tone: str, title: str, cta: str, cta_note: str,
     custom_prompt: str, sources: List[str], topic: Optional[str] = None,
-    model: Optional[str] = None, temperature: float = 0.3, max_turns: int = 2
+    model: Optional[str] = None, temperature: float = 0.2, max_turns: int = 2
 ) -> Dict:
     if not sources:
         raise ValueError("Provide at least one domain in `sources`")
 
     client = _get_openai_client()
     user_input = _build_user_task(audience, tone, title, cta, cta_note, custom_prompt, topic, sources)
-    model = model or os.getenv("LLM_MODEL", "gpt-4o-mini")
+    # Use a structured-outputs-capable snapshot
+    model = model or os.getenv("LLM_MODEL", "gpt-4o-2024-08-06")
 
-    # Turn 1: ask, allow tools
-    resp1 = client.responses.parse(
+    # Turn 1: allow web_search, enforce strict JSON Schema
+    resp1 = client.responses.create(
         model=model,
         temperature=temperature,
         instructions=SYSTEM_INSTRUCTIONS,
         input=[{"role": "user", "content": user_input}],
         tools=[{"type": "web_search"}],
         tool_choice="auto",
-        max_output_tokens=1200,
-        text_format=NewsletterPayload,
+        max_output_tokens=900,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "newsletter_payload",
+                "schema": NEWSLETTER_JSON_SCHEMA,
+                "strict": True,
+            }
+        },
     )
-    payload = resp1.output_parsed
 
-    used_search = _has_search_call(resp1)
-    sources_1 = _merge_sources(
-        _extract_sources_from_annotations(resp1),
-        _extract_sources_from_search_results(resp1)
-    )
-
-    # Turn 2: if no search happened or we found zero sources, force it
+    # If you want a second turn to finalize without tools:
     resp_final = resp1
-    if max_turns > 1 and (not used_search or len(sources_1) == 0):
-        force_msg = (
-            "You did not perform web_search. Now call web_search with recency_days=14 and queries "
-            f"restricted to these domains: {', '.join(sources)}. Use the topic as keywords. "
-            "Then synthesize and return ONLY the structured object."
-        )
-        resp2 = client.responses.parse(
+    if max_turns > 1:
+        resp2 = client.responses.create(
             model=model,
-            temperature=min(temperature, 0.2),
+            temperature=min(temperature, 0.15),
             instructions=SYSTEM_INSTRUCTIONS,
-            input=[{"role": "user", "content": force_msg}],
+            input=[{"role": "user", "content": "Finalize. Return ONLY the JSON object."}],
             tools=[{"type": "web_search"}],
-            tool_choice="auto",
-            max_output_tokens=1200,
-            text_format=NewsletterPayload,
+            tool_choice="none",
+            max_output_tokens=900,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "newsletter_payload",
+                    "schema": NEWSLETTER_JSON_SCHEMA,
+                    "strict": True,
+                }
+            },
         )
-        payload = resp2.output_parsed
         resp_final = resp2
-        sources_2 = _merge_sources(
-            _extract_sources_from_annotations(resp2),
-            _extract_sources_from_search_results(resp2)
-        )
-        sources_1 = _merge_sources(sources_1, sources_2)
 
-    result = payload.model_dump()
-    result["sources"] = sources_1
-    return result
+    # Parse strictly; if the SDK gives you the string, use output_text
+    raw_text = getattr(resp_final, "output_text", "") or ""
+    if not raw_text:
+        # Some SDK builds nest the text in content; backstop:
+        try:
+            item = resp_final.output[0].content[0]
+            raw_text = getattr(item, "text", "")
+        except Exception:
+            raw_text = ""
+
+    data = _safe_parse_newsletter(raw_text)
+    for k in ("subject", "text", "html"):
+        if not isinstance(data.get(k), str):
+            raise ValueError(f"Model returned non-string for {k}")
+
+    # Use the FIRST turn’s annotations (that’s where web_search usually attached)
+    sources_list = _extract_sources_from_resp(resp1) or _extract_sources_from_resp(resp_final)
+    data["sources"] = sources_list
+    return data
 
 def _coerce_recipients(r):
     if not r:
