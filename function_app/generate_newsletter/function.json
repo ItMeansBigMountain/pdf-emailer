@@ -7,7 +7,9 @@
       "direction": "in",
       "name": "req",
       "route": "generate-newsletter",
-      "methods": ["post"]
+      "methods": [
+        "post"
+      ]
     },
     {
       "type": "http",
