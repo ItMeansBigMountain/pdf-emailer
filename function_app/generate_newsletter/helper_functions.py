@@ -1,42 +1,49 @@
-# helper_functions.py (final, source is required-but-nullable per Structured Outputs)
+# helper_functions.py (patched final)
+
 import os
+import re
 import json
+import smtplib
 import logging
 from typing import List, Dict, Optional
-from pydantic import BaseModel, Field, ValidationError
+from email.message import EmailMessage
 
-# Basic logger config (Functions picks this up)
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("newsletter")
+from pydantic import BaseModel, Field
+from markdown2 import markdown
 
+# -----------------------------------------------------------------------------
+# System instructions: force inline sources and JSON-only output
+# -----------------------------------------------------------------------------
 SYSTEM_INSTRUCTIONS = (
     "You are a senior newsletter editor.\n"
-    "You have the web_search tool enabled. Only use it to fetch RECENT articles "
-    "from the allowed domains. Prefer last 7–14 days. Include the exact URL in annotations.\n"
+    "You have the web_search tool enabled. Use it ONLY to fetch RECENT articles (last 7–14 days) "
+    "from the allowed domains provided by the user. If you cannot find a verified article for a claim, say so.\n"
+    "Every bullet or claim MUST include an inline source link in parentheses exactly like "
+    "(Source: https://allowed-domain/...), using the original article URL. "
+    "Do not use footnote numbers. Do not summarize without sources. Do not invent URLs.\n"
     "Return ONLY JSON matching the schema. Do NOT include markdown fences. Do NOT include prose."
 )
 
-# ---------- Pydantic models for validation ----------
-
-class SourceItem(BaseModel):
-    title: str = Field(..., description="Short article/source title")
-    url: str   = Field(..., description="Canonical URL to the article")
-    # required-but-nullable field (must be present; may be None)
-    source: Optional[str] = Field(..., description="Source/domain; can be null")
-
+# -----------------------------------------------------------------------------
+# Structured Output model (we validate after parsing raw JSON)
+# -----------------------------------------------------------------------------
 class NewsletterPayload(BaseModel):
     subject: str = Field(..., max_length=78, description="Email subject, <=78 chars.")
-    text: str    = Field(..., description="Plaintext body for clients without HTML.")
-    html: str    = Field(..., description="Inline-friendly HTML, no external CSS/scripts.")
-    sources: List[SourceItem] = Field(
-        ..., min_items=1, description="At least 1 recent source (title + url) used in the newsletter."
-    )
+    text: str = Field(..., description="Plaintext body for clients without HTML.")
+    html: str = Field(..., description="Inline-friendly HTML, no external CSS/scripts.")
 
-# ---------- Prompt builders ----------
-
+# -----------------------------------------------------------------------------
+# Prompt construction
+# -----------------------------------------------------------------------------
 def _build_user_task(
-    audience: str, tone: str, title: str, cta: str, cta_note: str,
-    custom_prompt: str, topic: Optional[str], sources: List[str]
+    audience: str,
+    tone: str,
+    title: str,
+    cta: str,
+    cta_note: str,
+    custom_prompt: str,
+    topic: Optional[str],
+    sources: List[str],
 ) -> str:
     src_lines = "\n".join(f"- {d}" for d in sources)
     topic_line = f"Topic focus: {topic}" if topic else "Topic focus: latest noteworthy items"
@@ -46,98 +53,125 @@ def _build_user_task(
         f"CTA label: {cta}\nCTA note: {cta_note}\nExtra instructions: {custom_prompt}\n"
         "Tasks:\n"
         "1) Use the web_search tool to find the most recent, high-signal articles from ONLY the allowed domains.\n"
-        "2) Synthesize a concise newsletter for the audience with the requested tone and CTA.\n"
-        "3) Return only the structured object defined by the schema (subject, text, html, sources[]). No extra keys.\n"
-        "4) Each item in sources MUST include a usable URL.\n"
-        "5) Include citations as annotations so URLs can also appear as metadata."
+        "2) Synthesize a concise newsletter. Each bullet/statement MUST end with \"(Source: https://...)\" "
+        "linking the original article URL from an allowed domain.\n"
+        "3) Return only the structured object defined by the schema (subject, text, html). No extra keys.\n"
+        "4) Include sources inline in text/html; also include standard message annotations (URLs)."
     )
 
-# ---------- OpenAI client + schema ----------
-
+# -----------------------------------------------------------------------------
+# OpenAI client + JSON schema for Structured Outputs
+# -----------------------------------------------------------------------------
 def _get_openai_client():
     from openai import OpenAI
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY not set")
+    # OPENAI_API_KEY must be set in environment (Functions config/app settings)
     return OpenAI()
 
 def _json_schema() -> dict:
+    # 'sources' is NOT part of the schema; we attach it after validation.
     return {
         "type": "object",
         "properties": {
-            "subject": { "type": "string", "description": "Email subject, <=78 chars." },
-            "text":    { "type": "string", "description": "Plaintext body." },
-            "html":    { "type": "string", "description": "Inline-safe HTML only." },
-            "sources": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "title":  { "type": "string" },
-                        "url":    { "type": "string" },
-                        # required-but-nullable per Structured Outputs rules
-                        "source": { "type": ["string", "null"] }
-                    },
-                    "required": ["title", "url", "source"],
-                    "additionalProperties": False
-                }
-            }
+            "subject": {"type": "string", "description": "Email subject, <=78 chars."},
+            "text": {"type": "string", "description": "Plaintext body."},
+            "html": {"type": "string", "description": "Inline-safe HTML only."},
         },
-        "required": ["subject", "text", "html", "sources"],
-        "additionalProperties": False
+        "required": ["subject", "text", "html"],
+        "additionalProperties": False,
     }
 
-# ---------- Utilities ----------
-
-def _extract_sources_from_annotations(resp) -> List[Dict[str, str]]:
+# -----------------------------------------------------------------------------
+# Source harvesting: first from annotations, then fallback from HTML
+# -----------------------------------------------------------------------------
+def _extract_sources_from_resp(resp) -> List[Dict[str, str]]:
     """
-    Best effort: read URL annotations from last assistant message and turn them into source dicts.
+    Harvest URL annotations from the last assistant message (if present).
+    Returns: [{"title": "...", "url": "...", "source": ""}, ...]
     """
     items = [it for it in getattr(resp, "output", []) if getattr(it, "type", "") == "message"]
     if not items:
         return []
     last = items[-1]
-    extracted: List[Dict[str, str]] = []
+    out: List[Dict[str, str]] = []
     for block in getattr(last, "content", []) or []:
         for ann in getattr(block, "annotations", []) or []:
             if getattr(ann, "type", "") == "url" and getattr(ann, "url", ""):
-                extracted.append({
-                    "title": getattr(ann, "title", "") or "",
-                    "url": ann.url,
-                    "source": None
-                })
-    return extracted
+                out.append(
+                    {
+                        "title": getattr(ann, "title", "") or "",
+                        "url": ann.url,
+                        "source": "",
+                    }
+                )
+    return out
 
-def _dedupe_sources(primary: List[Dict[str, str]], extra: List[Dict[str, str]]) -> List[Dict[str, str]]:
+_URL_RE = re.compile(r'https?://[^\s")]+', re.IGNORECASE)
+
+def _extract_urls_from_html(html: str) -> List[str]:
+    if not html:
+        return []
+    # de-dupe while keeping order
+    return list(dict.fromkeys(_URL_RE.findall(html)))
+
+def _filter_allowed(urls: List[str], allowed_domains: List[str]) -> List[str]:
+    """
+    Keep only URLs that belong to one of the allowed domains.
+    Accepts http/https and basic endswith/startswith checks.
+    """
+    result: List[str] = []
+    for u in urls:
+        lu = u.lower()
+        for d in allowed_domains:
+            d = d.strip().lower()
+            if not d:
+                continue
+            if lu.startswith(f"https://{d}/") or lu.startswith(f"http://{d}/") or lu.endswith(d):
+                result.append(u)
+                break
+    # final de-dupe
+    out: List[str] = []
     seen = set()
-    merged: List[Dict[str, str]] = []
-    for s in (primary + extra):
-        url = (s.get("url") or "").strip()
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        merged.append({
-            "title": s.get("title") or "",
-            "url": url,
-            "source": s.get("source")
-        })
-    return merged
+    for u in result:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
 
-# ---------- Main generation ----------
-
+# -----------------------------------------------------------------------------
+# Main generator
+# -----------------------------------------------------------------------------
 def generate_newsletter_via_openai_websearch(
-    audience: str, tone: str, title: str, cta: str, cta_note: str,
-    custom_prompt: str, sources: List[str], topic: Optional[str] = None,
-    model: Optional[str] = None, temperature: float = 0.2, max_turns: int = 1
+    audience: str,
+    tone: str,
+    title: str,
+    cta: str,
+    cta_note: str,
+    custom_prompt: str,
+    sources: List[str],
+    topic: Optional[str] = None,
+    model: Optional[str] = None,
+    temperature: float = 0.2,
+    max_turns: int = 1,
 ) -> Dict:
+    """
+    Uses OpenAI Responses API with web_search tool and Structured Outputs (json_schema) to
+    produce a newsletter payload (subject, text, html). Then harvests sources either
+    from annotations or from the HTML as fallback (filtered to the allowlist).
+    """
     if not sources:
         raise ValueError("Provide at least one domain in `sources`")
+
+    # So we can reference the original allowlist later when filtering fallback URLs.
+    sources_param = sources[:]
 
     client = _get_openai_client()
     model = model or os.getenv("LLM_MODEL", "gpt-4o-2024-08-06")
     schema = _json_schema()
-    user_input = _build_user_task(audience, tone, title, cta, cta_note, custom_prompt, topic, sources)
+    user_input = _build_user_task(audience, tone, title, cta, cta_note, custom_prompt, topic, sources_param)
 
+    logging.info("[generate] model=%s, temperature=%s, allowlist=%s", model, temperature, sources_param)
+
+    # Turn 1: allow web_search + enforce json_schema
     resp = client.responses.create(
         model=model,
         temperature=temperature,
@@ -151,17 +185,20 @@ def generate_newsletter_via_openai_websearch(
                 "type": "json_schema",
                 "name": "newsletter_payload",
                 "schema": schema,
-                "strict": True
+                "strict": True,
             }
-        }
+        },
     )
 
+    # If the model performed a tool call and didn't produce the JSON yet,
+    # do a finalize pass with tools disabled.
     if not getattr(resp, "output_text", None) and max_turns > 0:
+        logging.warning("[generate] First turn produced no output_text; finalizing JSON without tools.")
         resp = client.responses.create(
             model=model,
-            temperature=min(temperature, 0.1),
+            temperature=0.1,
             max_output_tokens=1500,
-            instructions="Return ONLY the JSON object for keys subject, text, html, sources[]. Nothing else.",
+            instructions="Return ONLY the JSON object for keys subject, text, html. Nothing else.",
             input=[{"role": "user", "content": "Finalize JSON now."}],
             tools=[{"type": "web_search"}],
             tool_choice="none",
@@ -170,23 +207,23 @@ def generate_newsletter_via_openai_websearch(
                     "type": "json_schema",
                     "name": "newsletter_payload",
                     "schema": schema,
-                    "strict": True
+                    "strict": True,
                 }
-            }
+            },
         )
 
-    raw = getattr(resp, "output_text", "")
-    log.info("LLM output_text (truncated 4k): %s", (raw[:4000] + ("..." if len(raw) > 4000 else "")))
-
+    # Try to parse the JSON directly. If it fails, ask once more for the pure JSON.
     try:
-        parsed = json.loads(raw)
-    except Exception:
-        log.warning("Primary JSON parse failed; issuing strict finalize retry.")
+        raw_text = resp.output_text or ""
+        logging.info("[generate] output_text length=%d", len(raw_text))
+        payload = json.loads(raw_text)
+    except Exception as e:
+        logging.error("[generate] JSON parse failed on first attempt: %s", e)
         resp2 = client.responses.create(
             model=model,
             temperature=0.1,
             max_output_tokens=1500,
-            instructions="Return ONLY the JSON object for keys subject, text, html, sources[]. Nothing else.",
+            instructions="Return ONLY the JSON object for keys subject, text, html. Nothing else.",
             input=[{"role": "user", "content": "Finalize JSON now."}],
             tools=[{"type": "web_search"}],
             tool_choice="none",
@@ -195,37 +232,42 @@ def generate_newsletter_via_openai_websearch(
                     "type": "json_schema",
                     "name": "newsletter_payload",
                     "schema": schema,
-                    "strict": True
+                    "strict": True,
                 }
-            }
+            },
         )
-        raw = getattr(resp2, "output_text", "")
-        log.info("LLM finalize output_text (truncated 4k): %s", (raw[:4000] + ("..." if len(raw) > 4000 else "")))
-        parsed = json.loads(raw)
-        resp = resp2
+        raw_text2 = resp2.output_text or ""
+        logging.info("[generate] retry output_text length=%d", len(raw_text2))
+        payload = json.loads(raw_text2)
+        resp = resp2  # keep the finalized response for annotation harvesting
 
-    try:
-        payload = NewsletterPayload.model_validate(parsed).model_dump()
-    except ValidationError as ve:
-        log.error("Structured output failed validation: %s", ve)
-        log.error("Invalid payload JSON (truncated 4k): %s", (json.dumps(parsed)[:4000] + "..."))
-        raise
+    # Validate shape
+    NewsletterPayload.model_validate(payload)
 
-    ann_sources = _extract_sources_from_annotations(resp)
-    payload["sources"] = _dedupe_sources(payload.get("sources", []), ann_sources)
+    # 1) Prefer annotation-based sources
+    sources_list = _extract_sources_from_resp(resp)
 
-    if not payload["sources"]:
-        raise RuntimeError("Model returned zero sources after merge. Check domains/model/web_search availability.")
+    # 2) Fallback: parse URLs from HTML and filter to allowed domains
+    if not sources_list:
+        html = payload.get("html", "") or ""
+        extracted = _extract_urls_from_html(html)
+        allowed = _filter_allowed(extracted, sources_param)
+        sources_list = [{"title": "", "url": u, "source": ""} for u in allowed]
 
+    # 3) Hard fail if still empty
+    if not sources_list:
+        logging.error("[generate] No sources captured from annotations or HTML fallback.")
+        raise RuntimeError(
+            "No sources captured from annotations or HTML. Check allowed domains, web_search availability, and instructions."
+        )
+
+    payload["sources"] = sources_list
     return payload
 
-# ---------- Email sender ----------
-
-import smtplib
-from email.message import EmailMessage
-from markdown2 import markdown
-
-def _coerce_recipients(r):
+# -----------------------------------------------------------------------------
+# Email sender
+# -----------------------------------------------------------------------------
+def _coerce_recipients(r) -> List[str]:
     if not r:
         r = os.getenv("EMAIL_RECIPIENTS", "")
     if isinstance(r, list):
@@ -233,13 +275,16 @@ def _coerce_recipients(r):
     return [x.strip() for x in str(r).replace(";", ",").split(",") if x.strip()]
 
 def send_email(subject: str, text_body: str, html_body: str, recipients=None, sources=None):
+    """
+    Sends the email. If 'sources' are present, appends a Sources section to HTML.
+    """
     to_list = _coerce_recipients(recipients)
     if not to_list:
         raise ValueError("No recipients provided")
 
     if sources:
         lis = "".join(
-            [f'<li><a href="{s.get("url","#")}">{s.get("title","Source")}</a></li>' for s in sources[:10]]
+            [f'<li><a href="{s.get("url","#")}">{s.get("title","Source") or s.get("url","#")}</a></li>' for s in sources[:20]]
         )
         html_body = f'{html_body}<hr><p><strong>Sources</strong></p><ul>{lis}</ul>'
 
@@ -248,9 +293,19 @@ def send_email(subject: str, text_body: str, html_body: str, recipients=None, so
     msg["From"] = os.getenv("EMAIL_FROM")
     msg["To"] = ", ".join(to_list)
     msg.set_content(text_body or " ")
+    # ensure HTML exists even if model returns empty
     msg.add_alternative(html_body or markdown(text_body or ""), subtype="html")
 
-    with smtplib.SMTP(os.getenv("SMTP_SERVER"), int(os.getenv("SMTP_PORT", "587")), timeout=20) as server:
+    smtp_host = os.getenv("SMTP_SERVER")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USERNAME")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+
+    logging.info("[email] sending to=%s via %s:%s as %s", to_list, smtp_host, smtp_port, smtp_user)
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
         server.starttls()
-        server.login(os.getenv("SMTP_USERNAME"), os.getenv("SMTP_PASSWORD"))
+        server.login(smtp_user, smtp_pass)
         server.send_message(msg)
+
+    logging.info("[email] sent OK")

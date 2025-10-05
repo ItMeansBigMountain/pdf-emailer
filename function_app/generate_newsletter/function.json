@@ -1,15 +1,14 @@
 {
-  "scriptFile": "__init__.py",
   "bindings": [
     {
-      "authLevel": "anonymous",
+      "authLevel": "function",
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "route": "generate-newsletter",
       "methods": [
         "post"
-      ]
+      ],
+      "route": "generate-newsletter"
     },
     {
       "type": "http",
