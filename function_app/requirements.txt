@@ -16,6 +16,7 @@ langchain-cohere
 # langchain-huggingface
 
 # Email Genaration
+pydantic>=2.6
 markdown2
 # langchain-email
 
