@@ -1,28 +1,29 @@
 # function_app/generate_newsletter/__init__.py
 
 import json
+import logging
 import azure.functions as func
 from .helper_functions import generate_newsletter_via_openai_websearch, send_email
 
+logger = logging.getLogger("newsletter_function")
 
-def _json_response(data: dict, status: int = 200) -> func.HttpResponse:
+def _json_response(payload: dict, status: int = 200) -> func.HttpResponse:
     return func.HttpResponse(
-        json.dumps(data),
+        json.dumps(payload, ensure_ascii=False),
         status_code=status,
         mimetype="application/json",
     )
 
-
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    # --- Parse request JSON safely ---
+    # Parse request JSON (Azure Functions Python does not support silent=)
     try:
         d = req.get_json()
         if not isinstance(d, dict):
-            raise ValueError("JSON body must be an object")
+            d = {}
     except Exception:
         d = {}
 
-    # --- Call generator (always uses web search in helper) ---
+    # --- Generate newsletter ---
     try:
         payload = generate_newsletter_via_openai_websearch(
             audience=d.get("audience", "operators"),
@@ -38,17 +39,21 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             max_turns=int(d.get("max_turns", 2)),
         )
     except Exception as e:
-        # generation failure -> 500 with short reason
+        # Surface a helpful error body for CI/logs
+        logger.exception("Generation failed")
         return _json_response(
             {
                 "status": "error",
                 "stage": "generation",
                 "message": str(e),
+                "hint": "Set DEBUG_LOG_MODEL=1 to see detailed model/tool traces in logs.",
             },
             status=500,
         )
 
-    # --- Optionally email the result ---
+    # --- Optionally send email ---
+    email_status = "skipped"
+    email_error = None
     try:
         if d.get("send_email", True):
             send_email(
@@ -58,35 +63,21 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 recipients=d.get("recipients"),
                 sources=payload.get("sources"),
             )
-            emailed = True
-        else:
-            emailed = False
+            email_status = "sent"
     except Exception as e:
-        # email failure -> 502 but still return the generated content
-        return _json_response(
-            {
-                "status": "error",
-                "stage": "email",
-                "message": str(e),
-                "subject": payload.get("subject"),
-                "text": payload.get("text"),
-                "html": payload.get("html"),
-                "sources_count": len(payload.get("sources", [])),
-                "sources": payload.get("sources", []),
-            },
-            status=502,
-        )
+        email_status = "error"
+        email_error = str(e)
+        logger.exception("Email send failed")
 
-    # --- Success ---
-    return _json_response(
-        {
-            "status": "ok",
-            "emailed": emailed,
-            "subject": payload["subject"],
-            "text": payload["text"],
-            "html": payload["html"],
-            "sources_count": len(payload.get("sources", [])),
-            "sources": payload.get("sources", []),
-        },
-        status=200,
-    )
+    # --- Success response (always returns generated content) ---
+    body = {
+        "status": "ok",
+        "email_status": email_status,
+        "email_error": email_error,
+        "subject": payload["subject"],
+        "text": payload["text"],
+        "html": payload["html"],
+        "sources_count": len(payload.get("sources", [])),
+        "sources": payload.get("sources", []),
+    }
+    return _json_response(body, status=200)
