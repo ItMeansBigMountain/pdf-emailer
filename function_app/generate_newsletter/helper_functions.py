@@ -1,4 +1,4 @@
-# helper_functions.py (final, with structured sources + robust parsing + debug logs)
+# helper_functions.py (final, source is required-but-nullable per Structured Outputs)
 import os
 import json
 import logging
@@ -21,7 +21,8 @@ SYSTEM_INSTRUCTIONS = (
 class SourceItem(BaseModel):
     title: str = Field(..., description="Short article/source title")
     url: str   = Field(..., description="Canonical URL to the article")
-    source: str | None = Field(default=None, description="Optional source/domain")
+    # required-but-nullable field (must be present; may be None)
+    source: Optional[str] = Field(..., description="Source/domain; can be null")
 
 class NewsletterPayload(BaseModel):
     subject: str = Field(..., max_length=78, description="Email subject, <=78 chars.")
@@ -74,9 +75,10 @@ def _json_schema() -> dict:
                     "properties": {
                         "title":  { "type": "string" },
                         "url":    { "type": "string" },
+                        # required-but-nullable per Structured Outputs rules
                         "source": { "type": ["string", "null"] }
                     },
-                    "required": ["title", "url"],
+                    "required": ["title", "url", "source"],
                     "additionalProperties": False
                 }
             }
@@ -136,7 +138,6 @@ def generate_newsletter_via_openai_websearch(
     schema = _json_schema()
     user_input = _build_user_task(audience, tone, title, cta, cta_note, custom_prompt, topic, sources)
 
-    # First turn: allow web_search and enforce JSON Schema via `text.format`
     resp = client.responses.create(
         model=model,
         temperature=temperature,
@@ -155,7 +156,6 @@ def generate_newsletter_via_openai_websearch(
         }
     )
 
-    # If the first turn produced no output_text (e.g., still in tool call), force a finalize turn
     if not getattr(resp, "output_text", None) and max_turns > 0:
         resp = client.responses.create(
             model=model,
@@ -175,11 +175,9 @@ def generate_newsletter_via_openai_websearch(
             }
         )
 
-    # DEBUG: capture exactly what the model returned
     raw = getattr(resp, "output_text", "")
     log.info("LLM output_text (truncated 4k): %s", (raw[:4000] + ("..." if len(raw) > 4000 else "")))
 
-    # Parse JSON strictly; fallback to one more finalize if needed
     try:
         parsed = json.loads(raw)
     except Exception:
@@ -204,28 +202,24 @@ def generate_newsletter_via_openai_websearch(
         raw = getattr(resp2, "output_text", "")
         log.info("LLM finalize output_text (truncated 4k): %s", (raw[:4000] + ("..." if len(raw) > 4000 else "")))
         parsed = json.loads(raw)
-        resp = resp2  # keep the last response for annotations too
+        resp = resp2
 
-    # Validate shape
     try:
         payload = NewsletterPayload.model_validate(parsed).model_dump()
     except ValidationError as ve:
-        # Log entire invalid payload for diagnosis
         log.error("Structured output failed validation: %s", ve)
         log.error("Invalid payload JSON (truncated 4k): %s", (json.dumps(parsed)[:4000] + "..."))
         raise
 
-    # Merge any URL annotations (if present) with structured sources
     ann_sources = _extract_sources_from_annotations(resp)
     payload["sources"] = _dedupe_sources(payload.get("sources", []), ann_sources)
 
-    # Guarantee at least one source (schema already enforces, but we re-check after merge/dedupe)
     if not payload["sources"]:
         raise RuntimeError("Model returned zero sources after merge. Check domains/model/web_search availability.")
 
     return payload
 
-# ---------- Email sender (unchanged interface) ----------
+# ---------- Email sender ----------
 
 import smtplib
 from email.message import EmailMessage
@@ -243,7 +237,6 @@ def send_email(subject: str, text_body: str, html_body: str, recipients=None, so
     if not to_list:
         raise ValueError("No recipients provided")
 
-    # Append sources list to HTML footer (nice UX)
     if sources:
         lis = "".join(
             [f'<li><a href="{s.get("url","#")}">{s.get("title","Source")}</a></li>' for s in sources[:10]]

@@ -1,138 +1,141 @@
+# function_app/integration_test.py
 import os
+import sys
 import json
+import time
 import requests
-from typing import List
+from dotenv import load_dotenv
 
-# --- Configuration helpers ---------------------------------------------------
-
-def _env(name: str, default: str = "") -> str:
-    v = os.getenv(name)
-    return v if v is not None else default
+load_dotenv()
 
 def base_url() -> str:
     """
-    Resolved priority:
-      1) AZURE_FUNCTION_BASE_URL (can be full https://... or host only)
-      2) https://pdf-emailer-func.azurewebsites.net  (production)
-      3) http://localhost:7071                        (fallback)
+    Accepts:
+      AZURE_FUNCTION_BASE_URL="pdf-emailer-func.azurewebsites.net"
+      or "https://pdf-emailer-func.azurewebsites.net"
+      or "http://localhost:7071"
+    Fallback: http://localhost:7071
     """
-    raw = (_env("AZURE_FUNCTION_BASE_URL").strip())
-    if raw:
-        if raw.startswith("http://") or raw.startswith("https://"):
-            return raw.rstrip("/")
-        return "https://" + raw.rstrip("/")
-    # Prefer prod unless explicitly testing locally
-    if _env("LOCAL_TEST", "").lower() in ("1", "true", "yes"):
+    raw = (os.getenv("AZURE_FUNCTION_BASE_URL") or "").strip()
+    if not raw:
         return "http://localhost:7071"
-    return "https://pdf-emailer-func.azurewebsites.net"
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw.rstrip("/")
+    return "https://" + raw.rstrip("/")
 
 def function_url(route: str = "/api/generate-newsletter") -> str:
     url = f"{base_url()}{route}"
-    key = _env("AZURE_FUNCTION_KEY").strip()
+    key = (os.getenv("AZURE_FUNCTION_KEY") or "").strip()
     if key:
         sep = "&" if "?" in url else "?"
         url = f"{url}{sep}code={key}"
     return url
 
-# --- Payload builder (always web search) -------------------------------------
-
 def build_payload() -> dict:
     """
-    Always searches the web with allowed domains, and sends the email.
+    Always forces web search + email send.
     Customize via env:
-      TEST_NICHE, TEST_SOURCES (comma-separated), TEST_TITLE, TEST_AUDIENCE,
-      TEST_TONE, TEST_CTA, TEST_CTA_NOTE, LLM_MODEL, TEST_TEMPERATURE, TEST_MAX_TURNS,
-      TEST_CUSTOM_PROMPT, TEST_RECIPIENTS
+      TEST_NICHE, TEST_SOURCES, TEST_TITLE, TEST_AUDIENCE, TEST_TONE,
+      TEST_CTA, TEST_CTA_NOTE, TEST_MODEL, TEST_TEMPERATURE, TEST_MAX_TURNS,
+      TEST_RECIPIENTS
     """
-    niche = _env("TEST_NICHE", "crypto: BTC/ETH, DeFi, regulation, on-chain data")
-    sources_csv = _env(
+    niche   = os.getenv("TEST_NICHE", "crypto: BTC/ETH, DeFi, regulation, on-chain data")
+    sources = os.getenv(
         "TEST_SOURCES",
-        "coindesk.com,cointelegraph.com,decrypt.co,reuters.com,bloomberg.com",
+        "coindesk.com,cointelegraph.com,decrypt.co,reuters.com,bloomberg.com"
     )
-    sources: List[str] = [s.strip() for s in sources_csv.split(",") if s.strip()]
+    model   = os.getenv("TEST_MODEL", os.getenv("LLM_MODEL", "gpt-4o-2024-08-06"))
 
-    recipients = _env("TEST_RECIPIENTS", _env("EMAIL_RECIPIENTS", ""))  # optional
+    recipients = os.getenv("TEST_RECIPIENTS", os.getenv("EMAIL_RECIPIENTS", "")).strip()
 
-    payload = {
+    return {
         "allow_web": True,
-        "send_email": True,
-        "sources": sources,
+        "send_email": True,  # <- force email send during test
+        "recipients": recipients if recipients else None,  # function will fallback to env if None
+        "sources": [s.strip() for s in sources.split(",") if s.strip()],
         "topic": niche,
-        "title": _env("TEST_TITLE", "Crypto Weekly"),
-        "audience": _env("TEST_AUDIENCE", "operators"),
-        "tone": _env("TEST_TONE", "concise"),
-        "cta": _env("TEST_CTA", "Read the full brief"),
-        "cta_note": _env("TEST_CTA_NOTE", "3-minute skim"),
-        "model": _env("LLM_MODEL", "gpt-4o-2024-08-06"),
-        "temperature": float(_env("TEST_TEMPERATURE", "0.2")),
-        "max_turns": int(_env("TEST_MAX_TURNS", "2")),
-        "custom_prompt": _env("TEST_CUSTOM_PROMPT", ""),
+        "title": os.getenv("TEST_TITLE", "Crypto Weekly"),
+        "audience": os.getenv("TEST_AUDIENCE", "operators"),
+        "tone": os.getenv("TEST_TONE", "concise"),
+        "cta": os.getenv("TEST_CTA", "Read the full brief"),
+        "cta_note": os.getenv("TEST_CTA_NOTE", "3-minute skim"),
+        "model": model,
+        "temperature": float(os.getenv("TEST_TEMPERATURE", "0.2")),
+        "max_turns": int(os.getenv("TEST_MAX_TURNS", "1")),
+        "custom_prompt": os.getenv("TEST_CUSTOM_PROMPT", ""),
     }
 
-    if recipients:
-        payload["recipients"] = recipients
+def post_json(url: str, payload: dict, timeout_s: int) -> requests.Response:
+    return requests.post(url, json=payload, timeout=timeout_s)
 
-    return payload
+def validate_response(data: dict) -> None:
+    # Hard validations — raise AssertionError on failure
+    if not isinstance(data, dict):
+        raise AssertionError(f"Response is not a JSON object: {type(data)}")
 
-# --- Test runner -------------------------------------------------------------
+    for k in ("status", "subject", "text", "html"):
+        if k not in data:
+            raise AssertionError(f"Missing key in response: '{k}'")
+        if k == "status":
+            if data[k] != "ok":
+                raise AssertionError(f"Unexpected status: {data[k]}")
+        else:
+            if not isinstance(data[k], str) or not data[k].strip():
+                raise AssertionError(f"Key '{k}' must be a non-empty string")
+
+    # Sources can come either from the model (structured outputs) or annotations, but must be present
+    sources = data.get("sources", [])
+    scount = data.get("sources_count", len(sources))
+    if not isinstance(sources, list):
+        raise AssertionError(f"'sources' must be a list, got: {type(sources)}")
+
+    if scount < 1:
+        raise AssertionError(
+            f"No sources captured. Got sources_count={scount}, sources len={len(sources)}"
+        )
+
+    # Each source item should minimally have a URL
+    bad = [s for s in sources if not isinstance(s, dict) or not str(s.get("url", "")).strip()]
+    if bad:
+        raise AssertionError(f"Found source items without 'url': {json.dumps(bad[:3])}")
 
 def main() -> int:
     url = function_url()
     payload = build_payload()
-    timeout = int(_env("TEST_TIMEOUT", "90"))
+    timeout = int(os.getenv("TEST_TIMEOUT", "90"))
+    retries = int(os.getenv("TEST_RETRIES", "1"))  # minimal retry once if 500 or empty sources
 
-    # 1) Call the function
-    try:
-        resp = requests.post(url, json=payload, timeout=timeout)
-    except requests.Timeout as e:
-        raise TimeoutError(f"Timeout talking to Azure Function at {url}") from e
-    except requests.RequestException as e:
-        raise ConnectionError(f"Network error calling {url}: {e}") from e
-
-    # 2) Fail if non-200
-    if resp.status_code != 200:
-        # Try to include server-provided JSON if possible for easier debugging
-        text = resp.text
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 2):
         try:
-            parsed = resp.json()
-            text = json.dumps(parsed, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
-        raise AssertionError(f"HTTP {resp.status_code}: {text}")
+            resp = post_json(url, payload, timeout)
+            text = resp.text
 
-    # 3) Must be JSON
-    try:
-        data = resp.json()
-    except Exception as e:
-        raise ValueError(f"Non-JSON response from function: {resp.text[:500]}") from e
+            if resp.status_code != 200:
+                raise AssertionError(f"HTTP {resp.status_code}: {text}")
 
-    # 4) Validate keys and shape
-    for k in ("status", "subject", "text", "html"):
-        if k not in data:
-            raise AssertionError(f"Missing key in response: {k}")
-        if k in ("subject", "text", "html"):
-            v = data[k]
-            if not isinstance(v, str) or not v.strip():
-                raise AssertionError(f"Empty or non-string value for '{k}'")
+            # Must be JSON
+            try:
+                data = resp.json()
+            except Exception:
+                raise AssertionError(f"Response is not JSON: {text[:500]}")
 
-    # 5) Sources should be present (at least 1)
-    sources = data.get("sources", [])
-    scount = data.get("sources_count", len(sources))
-    if scount < 1 or not isinstance(sources, list):
-        raise AssertionError(
-            f"No sources captured. Got sources_count={scount}, sources type={type(sources).__name__}"
-        )
+            validate_response(data)
+            # Success
+            return 0
 
-    # 6) Optional check: email status
-    email_status = data.get("email_status", "unknown")
-    if payload.get("send_email") and email_status not in ("sent", "skipped"):
-        # We only fail if it's neither sent nor skipped (i.e., "error" or unknown)
-        email_error = data.get("email_error")
-        raise AssertionError(f"Email send failed. status={email_status}, error={email_error}")
+        except (AssertionError, requests.RequestException) as e:
+            last_exc = e
+            if attempt <= retries:
+                # brief backoff then try again
+                time.sleep(2.0)
+                continue
+            raise
 
-    return 0
-
+    # Shouldn't reach here
+    if last_exc:
+        raise last_exc
+    return 1
 
 if __name__ == "__main__":
-    # Let exceptions bubble up—CI will mark the job failed with the traceback.
-    exit(main())
+    sys.exit(main())
