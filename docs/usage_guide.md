@@ -1,5 +1,6 @@
 # 1. 🔄 Usage Guide
 
+stop writing unusable ai slop
 ## How to Use `pdf-emailer-func`
 
 ### Endpoint
